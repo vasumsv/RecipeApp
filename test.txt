@@ -1,38 +1,79 @@
-@Test
-    void getNettedPaymentRowsForManualPayment_dirtyCoverage() {
-        List<InvoicePayableModel> invoicePayableList = new ArrayList<>();
-        InvoicePayableModel invoice1 = new InvoicePayableModel();
-        invoice1.setCurrency("USD");
-        invoice1.setInvoiceReference("INV123");
-        invoice1.setProviderId("PID1");
-        invoice1.setFeeCategory("FCAT");
-        invoice1.setAmount(BigDecimal.valueOf(100.00));
-        invoicePayableList.add(invoice1);
+ @Test
+    public void testGetPaymentLinesFromPaymentReferences() {
+        // Mock dependencies
+        FileProcessingService fileProcessingService = Mockito.mock(FileProcessingService.class);
+        CashAllocationRepositoryApi cashAllocationRepositoryApi = Mockito.mock(CashAllocationRepositoryApi.class);
+        KafkaTemplate<String, String> kafkaTemplate = Mockito.mock(KafkaTemplate.class);
+        InvoiceServiceApi invoiceServiceApi = Mockito.mock(InvoiceServiceApi.class);
+        ReferentialServiceApi referentialServiceApi = Mockito.mock(ReferentialServiceApi.class);
+        SrMapper srMapper = Mockito.mock(SrMapper.class);
+        PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
+        MessageUtility messageUtility = Mockito.mock(MessageUtility.class);
 
-        List<PaymentList> paymentList = new ArrayList<>();
-        PaymentList payment = new PaymentList();
-        payment.setProviderId("PID1");
-        payment.setProviderMemo("Memo1");
-        payment.setDates("2023-10-27");
-        paymentList.add(payment);
+        // Create an instance of CashAllocationDomain with mocked dependencies
+        CashAllocationDomain cashAllocationDomain = new CashAllocationDomain(
+                fileProcessingService,
+                cashAllocationRepositoryApi,
+                kafkaTemplate,
+                invoiceServiceApi,
+                referentialServiceApi,
+                srMapper,
+                paymentRepository,
+                messageUtility
+        );
 
-        String user = "testUser";
+        // Create a list of payment references
+        List<String> paymentReferences = new ArrayList<>();
+        paymentReferences.add("reference1");
+        paymentReferences.add("reference2");
 
-        // Mocking for line coverage
-        when(invoiceServiceApi.getStoreAppReadAllMultipleInvoices(anyList())).thenReturn(new ArrayList<>());
+        // Mock the PaymentLineModel list to be returned by cashAllocationRepositoryApi
+        List<PaymentLineModel> paymentLineModels = new ArrayList<>();
+        PaymentLineModel model1 = new PaymentLineModel();
+        model1.setProviderId("provider1");
+        model1.setCurrency("USD");
+        model1.setEntity("entity1");
+        model1.setInvoiceReference("invoice1");
+        model1.setProviderName("providerName1");
+        model1.setAccountNumber("account1");
+        model1.setSslDetails("sslDetails1");
+        model1.setCategory("category1");
+        model1.setValueDate("2023-10-26");
+        model1.setSendingDate("2023-10-25");
+        model1.setAmount(100.0);
+        model1.setPaymentType("type1");
+        model1.setDirection("direction1");
+        model1.setPaymentState("state1");
+        model1.setPaymentType("paymentType1");
+        model1.setComment("comment1");
+        paymentLineModels.add(model1);
 
-        PortfolioDetailsResponse portfolioDetailsResponse = new PortfolioDetailsResponse();
-        portfolioDetailsResponse.setPortfolioDetails("port1;port2");
-        when(referentialServiceApi.getPortfolioDetailsBasedOnnemonic(anyString())).thenReturn(portfolioDetailsResponse);
+        PaymentLineModel model2 = new PaymentLineModel();
+        model2.setProviderId("provider2");
+        model2.setCurrency("EUR");
+        model2.setEntity("entity2");
+        model2.setInvoiceReference("invoice2");
+        model2.setProviderName("providerName2");
+        model2.setAccountNumber("account2");
+        model2.setSslDetails("sslDetails2");
+        model2.setCategory("category2");
+        model2.setValueDate("2023-10-27");
+        model2.setSendingDate("2023-10-26");
+        model2.setAmount(200.0);
+        model2.setPaymentType("type2");
+        model2.setDirection("direction2");
+        model2.setPaymentState("state2");
+        model2.setPaymentType("paymentType2");
+        model2.setComment("comment2");
+        paymentLineModels.add(model2);
 
-        List<SettlementAccountsResponse> settlementAccountsResponses = new ArrayList<>();
-        SettlementAccountsResponse settlementAccount = new SettlementAccountsResponse();
-        settlementAccount.setAccountCode("AC123");
-        settlementAccountsResponses.add(settlementAccount);
-        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString())).thenReturn(settlementAccountsResponses);
+        Mockito.when(cashAllocationRepositoryApi.findPaymentLinesFromPaymentReferences(paymentReferences)).thenReturn(paymentLineModels);
 
-        List<PaymentLinesModel> result = cashAllocationDomain.getNettedPaymentRowsForManualPayment(invoicePayableList, paymentList, user);
+        // Call the method under test
+        List<PaymentLineModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReferences(paymentReferences);
 
-        assertNotNull(result);
-        assertTrue(result.size() > 0); // Check for results
+        // Assert that the result is not null and has the same size as the mocked list
+        assertEquals(2, result.size());
+
+        // You can add more assertions to check the values of the PaymentLineModel objects in the result if needed
     }
