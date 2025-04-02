@@ -1,8 +1,11 @@
 import { ApplicationConfig } from '@angular/core';
 import { provideRouter } from '@angular/router';
-
-import { routes } from './app.routes';
+import { provideHttpClient } from '@angular/common/http';
+import { appRoutes } from './app.routes'; // Import your routes configuration
 
 export const appConfig: ApplicationConfig = {
-  providers: [provideRouter(routes)]
+  providers: [
+    provideRouter(appRoutes), // Use the routes defined in app.routes.ts
+    provideHttpClient(), // Provide HTTP client service globally
+  ],
 };

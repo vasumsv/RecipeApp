@@ -1,12 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, Input } from '@angular/core';
 
 @Component({
   selector: 'app-recipe-display',
-  standalone: true,
-  imports: [],
   templateUrl: './recipe-display.component.html',
-  styleUrl: './recipe-display.component.css'
+  styleUrls: ['./recipe-display.component.css']
 })
 export class RecipeDisplayComponent {
-
+  @Input() recipes: string[] = [];
 }

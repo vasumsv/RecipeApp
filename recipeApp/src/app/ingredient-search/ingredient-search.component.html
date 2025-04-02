@@ -1,1 +1,5 @@
-<p>ingredient-search works!</p>
+<input type="text" class="form-control" placeholder="Search ingredients..." [(ngModel)]="searchText" />
+<div *ngFor="let ingredient of ingredients | filter:searchText">
+  <input type="checkbox" [(ngModel)]="ingredient.selected" /> {{ ingredient.name }}
+</div>
+<button class="btn btn-primary" (click)="confirmSelection()">Find Recipes</button>

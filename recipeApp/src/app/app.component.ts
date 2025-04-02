@@ -1,13 +1,15 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { IngredientSearchComponent } from './ingredient-search/ingredient-search.component';
 
 @Component({
+  standalone: true, // Mark AppComponent as standalone
   selector: 'app-root',
-  standalone: true,
-  imports: [RouterOutlet],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
+  styleUrls: ['./app.component.css'],
+  imports: [IngredientSearchComponent], // Import the IngredientSearchComponent
 })
 export class AppComponent {
-  title = 'recipeApp';
+  onIngredientsSelected(selectedIngredients: string[]) {
+    console.log('Selected Ingredients from AppComponent:', selectedIngredients);
+  }
 }
