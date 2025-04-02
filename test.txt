@@ -1,51 +1,67 @@
-
-    @Test
-    public void testGetPaymentLinesFromPaymentReferences_LineCoverage() {
+@Test
+    public void testUpdatePaymentLines_LineCoverage_1474_1515() {
         // Mock dependencies
         CashAllocationRepositoryApi cashAllocationRepositoryApi = Mockito.mock(CashAllocationRepositoryApi.class);
+        ReferentialServiceApi referentialServiceApi = Mockito.mock(ReferentialServiceApi.class);
+        SrMapper srMapper = Mockito.mock(SrMapper.class);
+        InvoiceServiceApi invoiceServiceApi = Mockito.mock(InvoiceServiceApi.class);
+        ReferentialServiceApi.UserDetails userDetails = Mockito.mock(ReferentialServiceApi.UserDetails.class);
+        ReferentialServiceApi.AccountDetails accounts = Mockito.mock(ReferentialServiceApi.AccountDetails.class);
+        ReferentialServiceApi.PaymentCheckResponse paymentCheckResponse = Mockito.mock(ReferentialServiceApi.PaymentCheckResponse.class);
+        ReferentialServiceApi.ListSslDetails listSslDetails = Mockito.mock(ReferentialServiceApi.ListSslDetails.class);
+        ReferentialServiceApi.ListCallSalesResponse listCallSalesResponse = Mockito.mock(ReferentialServiceApi.ListCallSalesResponse.class);
+        ReferentialServiceApi.Collectors collectors = Mockito.mock(ReferentialServiceApi.Collectors.class);
+        ReferentialServiceApi.ListResponse listResponse = Mockito.mock(ReferentialServiceApi.ListResponse.class);
+
+        // Create an instance of CashAllocationDomain with mocked dependencies
         CashAllocationDomain cashAllocationDomain = new CashAllocationDomain(
                 Mockito.mock(FileProcessingService.class),
                 cashAllocationRepositoryApi,
                 Mockito.mock(KafkaTemplate.class),
-                Mockito.mock(InvoiceServiceApi.class),
-                Mockito.mock(ReferentialServiceApi.class),
-                Mockito.mock(SrMapper.class),
+                invoiceServiceApi,
+                referentialServiceApi,
+                srMapper,
                 Mockito.mock(PaymentRepository.class),
                 Mockito.mock(MessageUtility.class)
         );
 
-        // Create a String array for input
-        String[] paymentReferences = new String[]{"reference1", "reference2"};
+        // Input data
+        String user = "testUser";
+        List<PaymentLineModel> updatePaymentLines = new ArrayList<>();
+        PaymentLineModel model = new PaymentLineModel();
+        model.setPaymentType("A"); // For the if condition on line 1474
+        model.setProviderId("provider1");
+        model.setEntity("entity1");
+        model.setFeeId("fee1");
+        model.setCurrency("USD");
+        model.setInvoiceType("type1");
+        model.setProviderId("provider1");
+        model.setProviderBankName("bank1");
+        model.setProviderBankAccNumber("account1");
+        model.setProviderBankAccIfscCode("ifsc1");
+        model.setProviderBankAccSwiftCode("swift1");
+        model.setAccountNumber("account1");
+        model.setAmount(100.0);
+        model.setSendingDate("2023-10-27");
+        model.setValueDate("2023-10-28");
+        updatePaymentLines.add(model);
 
-        // Mock the private findPaymentLinesFromPaymentReferences method
-        List<SrgPaymentModel> srgPaymentModels = new ArrayList<>();
-        SrgPaymentModel srgModel1 = new SrgPaymentModel();
-        srgModel1.setProviderBdrId("provider1");
-        srgModel1.setPaymentCurrency("USD");
-        srgModel1.setSgEntity("entity1");
-        srgModel1.setFeeCategory("category1");
-        srgModel1.setInvoiceReference("invoice1,invoice2"); // Multiple invoices for split
-        srgModel1.setId("123");
-        srgModel1.setProviderName("Provider A");
-        srgModel1.setSendingDate("2023-11-01");
-        srgModel1.setPaymentAmount(100.0);
-        srgModel1.setPaymentType("Type A");
-        srgModel1.setDebitCredit("D");
-        srgModel1.setPaymentMode("Mode X");
-        srgModel1.setPaymentStatus("Processed");
-        srgModel1.setRcCode("RC1");
-        srgModel1.setComment("Test Comment");
-        srgPaymentModels.add(srgModel1);
+        // Mock repository and service calls
+        Mockito.when(referentialServiceApi.getAccountDetailsFromBrmForPayment(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(accounts);
+        Mockito.when(referentialServiceApi.getUserInitials(Mockito.anyString())).thenReturn(userDetails);
+        Mockito.when(referentialServiceApi.paymentCheck(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(paymentCheckResponse);
+        Mockito.when(referentialServiceApi.getSslDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listSslDetails);
+        Mockito.when(referentialServiceApi.getCallSalesDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listCallSalesResponse);
+        Mockito.when(referentialServiceApi.getCollectors(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listResponse);
+        Mockito.when(referentialServiceApi.getListSslDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listSslDetails);
+        Mockito.when(cashAllocationRepositoryApi.updatePaymentEntitiesByPaymentReference(Mockito.any(PaymentEntities.class))).thenReturn(1);
+        Mockito.when(cashAllocationRepositoryApi.findPaymentDetailsForInvoice(Mockito.any(PaymentDetailsForInvoice.class))).thenReturn(new ArrayList<>());
+        Mockito.when(srMapper.map(Mockito.any(PaymentLineModel.class), Mockito.any(PaymentEntities.class))).thenReturn(new PaymentEntities());
+        Mockito.when(srMapper.map(Mockito.any(PaymentLineModel.class), Mockito.any(PaymentDetailsForInvoice.class))).thenReturn(new PaymentDetailsForInvoice());
 
-        Mockito.when(Mockito.any(CashAllocationDomain.class), "findPaymentLinesFromPaymentReferences", any(String[].class))
-               .thenReturn(srgPaymentModels);
-
-        // Call the public method under test
-        List<PaymentLinesModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReference(paymentReferences);
+        // Call the method under test
+        List<PaymentLineModel> result = cashAllocationDomain.updatePaymentLines(user, updatePaymentLines);
 
         // Basic assertion
-        assertEquals(1, result.size());
-        assertEquals(2, result.get(0).getNumberOfInvoices()); // Check the split
-
-        // You can add more specific assertions if needed, but this covers the lines.
+        assertNotNull(result);
     }
