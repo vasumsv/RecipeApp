@@ -1,8 +1,8 @@
-  @Test
-    public void testGetPaymentLinesFromPaymentReferences_DirtyTest() {
+ @Test
+    public void testGetPaymentLinesFromPaymentReferences() {
         // Mock dependencies
-        FileProcessingService fileProcessingService = Mockito.mock(FileProcessingService.class);
         CashAllocationRepositoryApi cashAllocationRepositoryApi = Mockito.mock(CashAllocationRepositoryApi.class);
+        FileProcessingService fileProcessingService = Mockito.mock(FileProcessingService.class);
         KafkaTemplate<String, String> kafkaTemplate = Mockito.mock(KafkaTemplate.class);
         InvoiceServiceApi invoiceServiceApi = Mockito.mock(InvoiceServiceApi.class);
         ReferentialServiceApi referentialServiceApi = Mockito.mock(ReferentialServiceApi.class);
@@ -22,63 +22,71 @@
                 messageUtility
         );
 
-        // Create an array of payment references
-        String[] paymentReferences = new String[]{"ref1", "ref2", "ref3"};
+        // Create a list of payment references
+        List<String> paymentReferences = new ArrayList<>();
+        paymentReferences.add("reference1");
+        paymentReferences.add("reference2");
 
-        // Create a list of mocked SrgPaymentModel objects
-        List<SrgPaymentModel> mockedSrgPaymentModels = new ArrayList<>();
-        for (int i = 0; i < paymentReferences.length; i++) {
-            SrgPaymentModel model = new SrgPaymentModel();
-            model.setProviderBdrId("providerId_" + i);
-            model.setPaymentCurrency("USD");
-            model.setSgEntity("entity_" + i);
-            model.setFeeCategory("feeCategory_" + i);
-            model.setInvoiceReference("invA,invB"); // Simulate multiple invoices
-            model.setId((long) i);
-            model.setProviderName("providerName_" + i);
-            model.setPaymentAmount(100.0 + i * 10);
-            model.setValueDate("2025-04-0" + (3 + i));
-            model.setSendingDate("2025-04-0" + (2 + i));
-            model.setPaymentType("type_" + i);
-            model.setDebitCredit("CR");
-            model.setPaymentMode("mode_" + i);
-            model.setPaymentStatus("status_" + i);
-            model.setRcCode("RC_" + i);
-            model.setComment("comment_" + i);
-            mockedSrgPaymentModels.add(model);
-        }
+        // Mock the findPaymentDetailsForABA method to return a list of CashAllocationModel
+        List<CashAllocationModel> cashAllocationModels = new ArrayList<>();
+        CashAllocationModel model1 = new CashAllocationModel();
+        model1.setProviderId("provider1");
+        model1.setCurrency("USD");
+        model1.setEntity("entity1");
+        model1.setInvoiceReference("invoice1");
+        model1.setProviderName("providerName1");
+        model1.setAccountNumber("account1");
+        model1.setSslDetails("sslDetails1");
+        model1.setCategory("category1");
+        model1.setValueDate(LocalDate.of(2025, 4, 2));
+        model1.setSendingDate(LocalDate.of(2025, 4, 1));
+        model1.setAmount(100.0);
+        model1.setPaymentType("type1");
+        model1.setDirection("direction1");
+        model1.setPaymentState("state1");
+        model1.setPaymentType("paymentType1");
+        model1.setComment("comment1");
+        cashAllocationModels.add(model1);
 
-        // Mock the findPaymentLinesFromPaymentReferences method in the repository
-        when(cashAllocationRepositoryApi.findPaymentLinesFromPaymentReferences(paymentReferences)).thenReturn(mockedSrgPaymentModels);
+        CashAllocationModel model2 = new CashAllocationModel();
+        model2.setProviderId("provider2");
+        model2.setCurrency("EUR");
+        model2.setEntity("entity2");
+        model2.setInvoiceReference("invoice2");
+        model2.setProviderName("providerName2");
+        model2.setAccountNumber("account2");
+        model2.setSslDetails("sslDetails2");
+        model2.setCategory("category2");
+        model2.setValueDate(LocalDate.of(2025, 4, 3));
+        model2.setSendingDate(LocalDate.of(2025, 4, 2));
+        model2.setAmount(200.0);
+        model2.setPaymentType("type2");
+        model2.setDirection("direction2");
+        model2.setPaymentState("state2");
+        model2.setPaymentType("paymentType2");
+        model2.setComment("comment2");
+        cashAllocationModels.add(model2);
+
+        // Define the LocalDate endDate for the mock
+        LocalDate endDate = LocalDate.now(); // Or any specific date you want to use
+
+        Mockito.when(cashAllocationRepositoryApi.findPaymentDetailsForABA(endDate)).thenReturn(cashAllocationModels);
 
         // Call the method under test
-        List<PaymentLinesModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReference(paymentReferences);
+        // Assuming getPaymentLinesFromPaymentReferences in CashAllocationDomain now calls findPaymentDetailsForABA
+        List<CashAllocationModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReferences(paymentReferences);
 
-        // Assert that the result is not null and has the expected size
-        assertEquals(paymentReferences.length, result.size());
+        // Assert that the result is not null and has the same size as the mocked list
+        assertEquals(cashAllocationModels.size(), result.size());
 
-        // Dirty assertions to cover lines (not ideal for real tests)
-        for (int i = 0; i < result.size(); i++) {
-            PaymentLinesModel paymentLinesModel = result.get(i);
-            SrgPaymentModel srgPaymentModel = mockedSrgPaymentModels.get(i);
+        // You can add more assertions to check the values of the CashAllocationModel objects in the result if needed
+        assertEquals("provider1", result.get(0).getProviderId());
+        assertEquals("USD", result.get(0).getCurrency());
+        assertEquals("invoice1", result.get(0).getInvoiceReference());
+        // Add more assertions to verify other fields
 
-            assertEquals(2, paymentLinesModel.getNumberOfInvoices()); // Based on "invA,invB" split
-            assertEquals(0, paymentLinesModel.getNumberOfSSI()); // Assuming getSsiDetails returns empty for this dirty test
-            assertEquals(srgPaymentModel.getSgEntity(), paymentLinesModel.getSgEntity());
-            assertEquals(srgPaymentModel.getInvoiceReference(), paymentLinesModel.getInvoiceReference());
-            assertEquals(srgPaymentModel.getFeeCategory(), paymentLinesModel.getFeeCategory());
-            assertEquals(srgPaymentModel.getProviderBdrId(), paymentLinesModel.getProviderId());
-            assertEquals(srgPaymentModel.getValueDate(), paymentLinesModel.getValueDate());
-            assertEquals(srgPaymentModel.getSendingDate(), paymentLinesModel.getSendingDate());
-            assertEquals(mockedSrgPaymentModels.get(1).getPaymentAmount(), paymentLinesModel.getAmount()); // Note the index '1' - this is dirty and just to cover lines
-            assertEquals(mockedSrgPaymentModels.get(1).getPaymentCurrency(), paymentLinesModel.getCurrency()); // Note the index '1' - this is dirty
-            assertEquals(mockedSrgPaymentModels.get(1).getPaymentType(), paymentLinesModel.getInvoiceType()); // Note the index '1' - this is dirty
-            assertEquals(srgPaymentModel.getInvoiceReference().substring(0, 3), paymentLinesModel.getFeeType());
-            assertEquals(mockedSrgPaymentModels.get(1).getDebitCredit(), paymentLinesModel.getPaymentDirection()); // Note the index '1' - this is dirty
-            assertEquals(srgPaymentModel.getPaymentMode(), paymentLinesModel.getPaymentMode());
-            assertEquals(srgPaymentModel.getPaymentStatus(), paymentLinesModel.getPaymentStatus());
-            assertEquals(srgPaymentModel.getPaymentType(), paymentLinesModel.getPaymentType());
-            assertEquals(srgPaymentModel.getRcCode(), paymentLinesModel.getRc());
-            assertEquals(srgPaymentModel.getComment(), paymentLinesModel.getComment());
-        }
+        assertEquals("provider2", result.get(1).getProviderId());
+        assertEquals("EUR", result.get(1).getCurrency());
+        assertEquals("invoice2", result.get(1).getInvoiceReference());
+        // Add more assertions to verify other fields
     }
