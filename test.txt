@@ -1,52 +1,43 @@
-@Test
-void getNettedPaymentRowsForManualPayment_basicScenario() {
-    List<InvoicePayableModel> invoicePayableList = new ArrayList<>();
-    invoicePayableList.add(new InvoicePayableModel()); // Add a dummy object
+ @Test
+    void getNettedPaymentRowsForManualPayment_mapPopulationAndIteration() {
+        // Create InvoicePayableModel instances with necessary data
+        List<InvoicePayableModel> invoicePayableList = new ArrayList<>();
+        InvoicePayableModel invoice1 = new InvoicePayableModel();
+        invoice1.setCurrency("USD");
+        invoice1.setInvoiceReference("INV123");
+        invoice1.setAmount(BigDecimal.valueOf(100.00)); // Set amount
+        invoicePayableList.add(invoice1);
 
-    List<PaymentList> paymentList = new ArrayList<>();
-    paymentList.add(new PaymentList()); // Add a dummy object
+        InvoicePayableModel invoice2 = new InvoicePayableModel();
+        invoice2.setCurrency("EUR");
+        invoice2.setInvoiceReference("INV456");
+        invoice2.setAmount(BigDecimal.valueOf(200.00)); // Set amount
+        invoicePayableList.add(invoice2);
 
-    String user = "testUser";
+        // Create PaymentList instances (if needed for the method)
+        List<PaymentList> paymentList = new ArrayList<>();
+        PaymentList payment = new PaymentList();
+        payment.setProviderId("PID1");
+        payment.setProviderMemo("Memo1");
+        payment.setDates("2023-10-27");
+        paymentList.add(payment);
 
-    when(invoiceServiceApi.getStoreAppReadAllMultipleInvoices(anyList())).thenReturn(new ArrayList<>());
-    when(referentialServiceApi.getPortfolioDetailsBasedOnnemonic(anyString())).thenReturn(new PortfolioDetailsResponse()); // Add a dummy response
-    when(referentialServiceApi.getSettlementAccounts(anyString(), anyString())).thenReturn(new ArrayList<>()); // Add a dummy response
+        String user = "testUser";
 
-    List<PaymentLinesModel> result = cashAllocationDomain.getNettedPaymentRowsForManualPayment(invoicePayableList, paymentList, user);
+        // Mock the service calls based on your method's logic
+        when(invoiceServiceApi.getStoreAppReadAllMultipleInvoices(anyList())).thenReturn(new ArrayList<>());
+        when(referentialServiceApi.getPortfolioDetailsBasedOnnemonic(anyString())).thenReturn(new PortfolioDetailsResponse());
+        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString())).thenReturn(new ArrayList<>());
 
-    assertNotNull(result); // Basic assertion to check if a result is returned
-    // Add more assertions if needed for specific values
-}
+        // Call the method under test
+        List<PaymentLinesModel> result = cashAllocationDomain.getNettedPaymentRowsForManualPayment(invoicePayableList, paymentList, user);
 
+        // Assertions based on the expected behavior of the method
+        assertNotNull(result);
+        assertFalse(result.isEmpty());
 
-@Test
-void getNettedPaymentRowsForManualPayment_mapPopulationAndIteration() {
-    List<InvoicePayableModel> invoicePayableList = new ArrayList<>();
-    InvoicePayableModel invoice1 = new InvoicePayableModel();
-    invoice1.setCurrency("USD");
-    invoice1.setInvoiceNumber("INV123");
-    invoicePayableList.add(invoice1);
-
-    InvoicePayableModel invoice2 = new InvoicePayableModel();
-    invoice2.setCurrency("EUR");
-    invoice2.setInvoiceNumber("INV456");
-    invoicePayableList.add(invoice2);
-
-    List<PaymentList> paymentList = new ArrayList<>();
-    PaymentList payment = new PaymentList();
-    payment.setProviderId("PID1");
-    payment.setProviderMemo("Memo1");
-    payment.setDates("2023-10-27");
-    paymentList.add(payment);
-
-    String user = "testUser";
-
-    when(invoiceServiceApi.getStoreAppReadAllMultipleInvoices(anyList())).thenReturn(new ArrayList<>());
-    when(referentialServiceApi.getPortfolioDetailsBasedOnnemonic(anyString())).thenReturn(new PortfolioDetailsResponse());
-    when(referentialServiceApi.getSettlementAccounts(anyString(), anyString())).thenReturn(new ArrayList<>());
-
-    List<PaymentLinesModel> result = cashAllocationDomain.getNettedPaymentRowsForManualPayment(invoicePayableList, paymentList, user);
-
-    assertNotNull(result);
-    // Add more assertions to check the contents of the result list, if necessary
-}
+        // Add more specific assertions based on your method's logic
+        // Example:
+        // assertEquals(expectedSize, result.size());
+        // assertEquals(expectedValue, result.get(0).getProperty());
+    }
