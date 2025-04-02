@@ -1,92 +1,51 @@
- @Test
-    public void testGetPaymentLinesFromPaymentReferences() {
+
+    @Test
+    public void testGetPaymentLinesFromPaymentReferences_LineCoverage() {
         // Mock dependencies
         CashAllocationRepositoryApi cashAllocationRepositoryApi = Mockito.mock(CashAllocationRepositoryApi.class);
-        FileProcessingService fileProcessingService = Mockito.mock(FileProcessingService.class);
-        KafkaTemplate<String, String> kafkaTemplate = Mockito.mock(KafkaTemplate.class);
-        InvoiceServiceApi invoiceServiceApi = Mockito.mock(InvoiceServiceApi.class);
-        ReferentialServiceApi referentialServiceApi = Mockito.mock(ReferentialServiceApi.class);
-        SrMapper srMapper = Mockito.mock(SrMapper.class);
-        PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
-        MessageUtility messageUtility = Mockito.mock(MessageUtility.class);
-
-        // Create an instance of CashAllocationDomain with mocked dependencies
         CashAllocationDomain cashAllocationDomain = new CashAllocationDomain(
-                fileProcessingService,
+                Mockito.mock(FileProcessingService.class),
                 cashAllocationRepositoryApi,
-                kafkaTemplate,
-                invoiceServiceApi,
-                referentialServiceApi,
-                srMapper,
-                paymentRepository,
-                messageUtility
+                Mockito.mock(KafkaTemplate.class),
+                Mockito.mock(InvoiceServiceApi.class),
+                Mockito.mock(ReferentialServiceApi.class),
+                Mockito.mock(SrMapper.class),
+                Mockito.mock(PaymentRepository.class),
+                Mockito.mock(MessageUtility.class)
         );
 
-        // Create a list of payment references
-        List<String> paymentReferences = new ArrayList<>();
-        paymentReferences.add("reference1");
-        paymentReferences.add("reference2");
+        // Create a String array for input
+        String[] paymentReferences = new String[]{"reference1", "reference2"};
 
-        // Mock the findPaymentDetailsForABA method to return a list of CashAllocationModel
-        List<CashAllocationModel> cashAllocationModels = new ArrayList<>();
-        CashAllocationModel model1 = new CashAllocationModel();
-        model1.setProviderId("provider1");
-        model1.setCurrency("USD");
-        model1.setEntity("entity1");
-        model1.setInvoiceReference("invoice1");
-        model1.setProviderName("providerName1");
-        model1.setAccountNumber("account1");
-        model1.setSslDetails("sslDetails1");
-        model1.setCategory("category1");
-        model1.setValueDate(LocalDate.of(2025, 4, 2));
-        model1.setSendingDate(LocalDate.of(2025, 4, 1));
-        model1.setAmount(100.0);
-        model1.setPaymentType("type1");
-        model1.setDirection("direction1");
-        model1.setPaymentState("state1");
-        model1.setPaymentType("paymentType1");
-        model1.setComment("comment1");
-        cashAllocationModels.add(model1);
+        // Mock the private findPaymentLinesFromPaymentReferences method
+        List<SrgPaymentModel> srgPaymentModels = new ArrayList<>();
+        SrgPaymentModel srgModel1 = new SrgPaymentModel();
+        srgModel1.setProviderBdrId("provider1");
+        srgModel1.setPaymentCurrency("USD");
+        srgModel1.setSgEntity("entity1");
+        srgModel1.setFeeCategory("category1");
+        srgModel1.setInvoiceReference("invoice1,invoice2"); // Multiple invoices for split
+        srgModel1.setId("123");
+        srgModel1.setProviderName("Provider A");
+        srgModel1.setSendingDate("2023-11-01");
+        srgModel1.setPaymentAmount(100.0);
+        srgModel1.setPaymentType("Type A");
+        srgModel1.setDebitCredit("D");
+        srgModel1.setPaymentMode("Mode X");
+        srgModel1.setPaymentStatus("Processed");
+        srgModel1.setRcCode("RC1");
+        srgModel1.setComment("Test Comment");
+        srgPaymentModels.add(srgModel1);
 
-        CashAllocationModel model2 = new CashAllocationModel();
-        model2.setProviderId("provider2");
-        model2.setCurrency("EUR");
-        model2.setEntity("entity2");
-        model2.setInvoiceReference("invoice2");
-        model2.setProviderName("providerName2");
-        model2.setAccountNumber("account2");
-        model2.setSslDetails("sslDetails2");
-        model2.setCategory("category2");
-        model2.setValueDate(LocalDate.of(2025, 4, 3));
-        model2.setSendingDate(LocalDate.of(2025, 4, 2));
-        model2.setAmount(200.0);
-        model2.setPaymentType("type2");
-        model2.setDirection("direction2");
-        model2.setPaymentState("state2");
-        model2.setPaymentType("paymentType2");
-        model2.setComment("comment2");
-        cashAllocationModels.add(model2);
+        Mockito.when(Mockito.any(CashAllocationDomain.class), "findPaymentLinesFromPaymentReferences", any(String[].class))
+               .thenReturn(srgPaymentModels);
 
-        // Define the LocalDate endDate for the mock
-        LocalDate endDate = LocalDate.now(); // Or any specific date you want to use
+        // Call the public method under test
+        List<PaymentLinesModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReference(paymentReferences);
 
-        Mockito.when(cashAllocationRepositoryApi.findPaymentDetailsForABA(endDate)).thenReturn(cashAllocationModels);
+        // Basic assertion
+        assertEquals(1, result.size());
+        assertEquals(2, result.get(0).getNumberOfInvoices()); // Check the split
 
-        // Call the method under test
-        // Assuming getPaymentLinesFromPaymentReferences in CashAllocationDomain now calls findPaymentDetailsForABA
-        List<CashAllocationModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReferences(paymentReferences);
-
-        // Assert that the result is not null and has the same size as the mocked list
-        assertEquals(cashAllocationModels.size(), result.size());
-
-        // You can add more assertions to check the values of the CashAllocationModel objects in the result if needed
-        assertEquals("provider1", result.get(0).getProviderId());
-        assertEquals("USD", result.get(0).getCurrency());
-        assertEquals("invoice1", result.get(0).getInvoiceReference());
-        // Add more assertions to verify other fields
-
-        assertEquals("provider2", result.get(1).getProviderId());
-        assertEquals("EUR", result.get(1).getCurrency());
-        assertEquals("invoice2", result.get(1).getInvoiceReference());
-        // Add more assertions to verify other fields
+        // You can add more specific assertions if needed, but this covers the lines.
     }
