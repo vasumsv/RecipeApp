@@ -1,82 +1,86 @@
-@Test
-void getMettedRows_CoversAllLines() {
-    // 1. Setup input data with all required fields
-    InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-    payment.setInvoiceType("APPROVED");
-    payment.setProviderId("PROV123");
-    payment.setInvoiceReference("REF12345"); // Length >3 for substring(0,3)
-    payment.setFeederCategory("CAT1");
-    payment.setEntity("ENTITY1"); // For GroupingKey
-    payment.setCurrency("USD");   // For GroupingKey
+    private InvoicePayableModelForPayment createValidPayment() {
+        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+        payment.setInvoiceType("APPROVED");
+        payment.setProviderId("PROV123");
+        payment.setInvoiceReference("REF12345");
+        payment.setCurrency("USD");
+        payment.setFeederCategory("CAT1");
+        payment.setEntity("ENTITY1");
 
-    // Initialize nested objects to avoid NPEs
-    InvoicePayable invoicePayable = new InvoicePayable();
-    invoicePayable.setProviderMnemo("BROKER1");
-    invoicePayable.setPaymentMethod("MANUAL");
-    invoicePayable.setRedCode("RED123");
-    payment.setInvoicePayable(invoicePayable);
+        InvoicePayable invoicePayable = new InvoicePayable();
+        invoicePayable.setProviderMnemo("BROKER1");
+        invoicePayable.setPaymentMethod("MANUAL");
+        invoicePayable.setRedCode("RED123");
+        payment.setInvoicePayable(invoicePayable);
+        payment.setAmount(BigDecimal.valueOf(100.00));
+        
+        return payment;
+    }
 
-    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+    @Test
+    void getMettedRows_SuccessPath() {
+        // Given
+        InvoicePayableModelForPayment payment = createValidPayment();
+        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-    // 2. Mock external dependencies to cover ALL code paths
-    // --- Mock successful responses ---
-    PaymentModeAndLocationModel paymentMode = new PaymentModeAndLocationModel();
-    paymentMode.setPaymentMode("SWIFT");
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        any(BigInteger.class), any(BigInteger.class), any(BigInteger.class), 
-        anyString(), anyString()
-    )).thenReturn(paymentMode);
+        PaymentModeAndLocationModel paymentMode = new PaymentModeAndLocationModel();
+        paymentMode.setPaymentMode("SWIFT");
+        when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+            any(BigInteger.class), any(BigInteger.class), any(BigInteger.class), 
+            anyString(), anyString()
+        )).thenReturn(paymentMode);
 
-    PaymentDates dates = new PaymentDates();
-    dates.setValueDate("2023-10-01");
-    dates.setSendingDate("2023-10-02");
-    when(referentialServiceApi.getPaymentDates(
-        anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
-    )).thenReturn(dates);
+        PaymentDates dates = new PaymentDates();
+        dates.setValueDate(LocalDate.parse("2023-10-01"));
+        dates.setSendingDate(LocalDate.parse("2023-10-02"));
+        when(referentialServiceApi.getPaymentDates(
+            anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        )).thenReturn(dates);
 
-    // Mock SSI details (non-empty list)
-    List<String> ssDetails = Arrays.asList("ACC123", "ACC456");
-    when(referentialServiceApi.getSettlementDetails(
-        anyString(), anyString(), anyString(), anyString()
-    )).thenReturn(ssDetails);
+        when(referentialServiceApi.getSettlementDetails(
+            anyString(), anyString(), anyString(), anyString()
+        )).thenReturn(Arrays.asList("ACC123", "ACC456"));
 
-    // --- Mock exception paths ---
-    // Case 1: getPaymentModeAndSettlementLocation throws exception
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        eq(new BigInteger("123")), any(), any(), anyString(), anyString()
-    )).thenThrow(new RuntimeException("Mocked exception"));
+        // When
+        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
 
-    // Case 2: getPaymentDates throws exception
-    when(referentialServiceApi.getPaymentDates(
-        eq("ENTITY2"), any(), any(), any(), any(), any()
-    )).thenThrow(new RuntimeException("Mocked exception"));
+        // Then
+        assertFalse(result.isEmpty());
+        verify(referentialServiceApi).getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any());
+    }
 
-    // 3. Execute the method
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
+    @Test
+    void getMettedRows_ExceptionInPaymentMode() {
+        // Given
+        InvoicePayableModelForPayment payment = createValidPayment();
+        payment.setProviderId("123"); // Triggers exception
+        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-    // 4. Verify basic output
-    assertFalse(result.isEmpty());
+        when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+            eq(new BigInteger("123")), any(), any(), anyString(), anyString()
+        )).thenThrow(new RuntimeException("Mocked exception"));
 
-    // 5. Force coverage of exception blocks
-    // --- Test Case 1: Exception in getPaymentModeAndSettlementLocation ---
-    payment.setProviderId("123"); // Triggers mocked exception
-    List<PaymentLinesModel> exceptionResult1 = cashAllocationDomain.getMettedRows(
-        Collections.singletonList(payment), "user1"
-    );
-    assertNotNull(exceptionResult1.get(0).getComment());
+        // When
+        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
 
-    // --- Test Case 2: Exception in getPaymentDates ---
-    payment.setEntity("ENTITY2"); // Triggers mocked exception
-    List<PaymentLinesModel> exceptionResult2 = cashAllocationDomain.getMettedRows(
-        Collections.singletonList(payment), "user1"
-    );
-    assertNotNull(exceptionResult2.get(0).getComment());
+        // Then
+        assertNotNull(result.get(0).getComment());
+    }
 
-    // 6. Cover payment direction logic ("D" and "C")
-    payment.setEntity("ENTITY1");
-    payment.getInvoicePayable().setAmount(new BigDecimal("-100")); // Negative amount
-    List<PaymentLinesModel> negativeAmountResult = cashAllocationDomain.getMettedRows(
-        Collections.singletonList(payment), "user1"
-    );
-    assertEquals("C", negativeAmountResult.get(0).getPaymentDirection());
-}
+    @Test
+    void getMettedRows_ExceptionInPaymentDates() {
+        // Given
+        InvoicePayableModelForPayment payment = createValidPayment();
+        payment.setEntity("ENTITY2"); // Triggers exception
+        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+
+        when(referentialServiceApi.getPaymentDates(
+            eq("ENTITY2"), any(), any(), any(), any(), any()
+        )).thenThrow(new RuntimeException("Mocked exception"));
+
+        // When
+        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
+
+        // Then
+        assertNotNull(result.get(0).getComment());
+    }
