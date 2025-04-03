@@ -1,44 +1,82 @@
 @Test
-void getNettedPaymentRowsForManualPayment_CoversAllLines() {
-    // 1. Initialize ALL required fields to avoid NPEs
+void getMettedRows_CoversAllLines() {
+    // 1. Setup input data with all required fields
     InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-    payment.setInvoiceType("APPROVED"); // Must match valid status (not DRAFT/ANEWOED/CANCELLED)
+    payment.setInvoiceType("APPROVED");
     payment.setProviderId("PROV123");
-    payment.setInvoiceReference("REF12345"); // Ensure length >=3 for substring(0,3)
+    payment.setInvoiceReference("REF12345"); // Length >3 for substring(0,3)
     payment.setFeederCategory("CAT1");
+    payment.setEntity("ENTITY1"); // For GroupingKey
+    payment.setCurrency("USD");   // For GroupingKey
 
-    // 2. Initialize nested objects (e.g., InvoicePayable)
+    // Initialize nested objects to avoid NPEs
     InvoicePayable invoicePayable = new InvoicePayable();
     invoicePayable.setProviderMnemo("BROKER1");
-    payment.setInvoicePayable(invoicePayable); // Avoids NPE in .getInvoicePayable().getProviderMnemo()
-
-    // 3. Set other potential null fields (add these if they exist in your model)
-    payment.setCurrency("USD"); // If used in GroupingKey
-    payment.setEntity("ENTITY1"); // If used in GroupingKey
+    invoicePayable.setPaymentMethod("MANUAL");
+    invoicePayable.setRedCode("RED123");
+    payment.setInvoicePayable(invoicePayable);
 
     List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-    // 4. Mock external dependencies
-    BapPayableModel bap = new BapPayableModel();
-    bap.setPortfolio("PORTFOLIO1");
-    when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(any()))
-        .thenReturn(Collections.singletonList(bap));
+    // 2. Mock external dependencies to cover ALL code paths
+    // --- Mock successful responses ---
+    PaymentModeAndLocationModel paymentMode = new PaymentModeAndLocationModel();
+    paymentMode.setPaymentMode("SWIFT");
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+        any(BigInteger.class), any(BigInteger.class), any(BigInteger.class), 
+        anyString(), anyString()
+    )).thenReturn(paymentMode);
 
-    // 5. Mock referential service responses
-    PortfolioAdvanceDetailResponse portfolioDetails = new PortfolioAdvanceDetailResponse();
-    portfolioDetails.setCodTrs("BDR123");
-    when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic("PORTFOLIO1"))
-        .thenReturn(portfolioDetails);
+    PaymentDates dates = new PaymentDates();
+    dates.setValueDate("2023-10-01");
+    dates.setSendingDate("2023-10-02");
+    when(referentialServiceApi.getPaymentDates(
+        anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+    )).thenReturn(dates);
 
-    SettlementsAccounts settlementAccount = new SettlementsAccounts();
-    settlementAccount.setNumbertrg1("ACC123");
-    when(referentialServiceApi.getSettlementsAccounts(anyString(), anyString(), anyString()))
-        .thenReturn(Collections.singletonList(settlementAccount));
+    // Mock SSI details (non-empty list)
+    List<String> ssDetails = Arrays.asList("ACC123", "ACC456");
+    when(referentialServiceApi.getSettlementDetails(
+        anyString(), anyString(), anyString(), anyString()
+    )).thenReturn(ssDetails);
 
-    // 6. Execute the method
-    List<PaymentLinesModel> result = cashAllocationDomain
-        .getNettedPaymentRowsForManualPayment(paymentList, "user1");
+    // --- Mock exception paths ---
+    // Case 1: getPaymentModeAndSettlementLocation throws exception
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+        eq(new BigInteger("123")), any(), any(), anyString(), anyString()
+    )).thenThrow(new RuntimeException("Mocked exception"));
 
-    // 7. Verify output
+    // Case 2: getPaymentDates throws exception
+    when(referentialServiceApi.getPaymentDates(
+        eq("ENTITY2"), any(), any(), any(), any(), any()
+    )).thenThrow(new RuntimeException("Mocked exception"));
+
+    // 3. Execute the method
+    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
+
+    // 4. Verify basic output
     assertFalse(result.isEmpty());
+
+    // 5. Force coverage of exception blocks
+    // --- Test Case 1: Exception in getPaymentModeAndSettlementLocation ---
+    payment.setProviderId("123"); // Triggers mocked exception
+    List<PaymentLinesModel> exceptionResult1 = cashAllocationDomain.getMettedRows(
+        Collections.singletonList(payment), "user1"
+    );
+    assertNotNull(exceptionResult1.get(0).getComment());
+
+    // --- Test Case 2: Exception in getPaymentDates ---
+    payment.setEntity("ENTITY2"); // Triggers mocked exception
+    List<PaymentLinesModel> exceptionResult2 = cashAllocationDomain.getMettedRows(
+        Collections.singletonList(payment), "user1"
+    );
+    assertNotNull(exceptionResult2.get(0).getComment());
+
+    // 6. Cover payment direction logic ("D" and "C")
+    payment.setEntity("ENTITY1");
+    payment.getInvoicePayable().setAmount(new BigDecimal("-100")); // Negative amount
+    List<PaymentLinesModel> negativeAmountResult = cashAllocationDomain.getMettedRows(
+        Collections.singletonList(payment), "user1"
+    );
+    assertEquals("C", negativeAmountResult.get(0).getPaymentDirection());
 }
