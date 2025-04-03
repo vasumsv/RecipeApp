@@ -1,4 +1,4 @@
-    @Test
+  @Test
     void getRetNetRowsForManualPaymentTest_DirtyCoverage() {
         List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
         InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
@@ -26,7 +26,7 @@
         when(referentialServiceApi.getPaymentDates(anyString(), anyString(), anyString())).thenReturn(dates);
         when(invoiceServiceApi.getListOfBagDetailsForMultipleInvoices(anyList())).thenReturn(listMap);
         when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic(anyString())).thenReturn(portfolioDetails);
-        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts);
+        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts); // Corrected line
 
         Map<GroupingKey, BigDecimal> aggregateAmount = new ConcurrentHashMap<>();
         aggregateAmount.put(new GroupingKey("entity1", "USD"), new BigDecimal("200.00"));
