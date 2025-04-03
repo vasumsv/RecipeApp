@@ -1,22 +1,30 @@
 @Test
 void getMettedRows_ExceptionInPaymentMode() {
-    // Setup
-    InvoicePayableModelForPayment payment = createBasePayment();
-    payment.setProviderId("123"); // Must match the mocked BigInteger("123")
-    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+    // Setup test data
+    InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+    payment.setProviderId("123"); // Will trigger the exception
+    payment.setInvoiceType("APPROVED");
+    payment.setEntity("ENTITY1");
+    payment.setCurrency("USD");
+    // Set other required fields...
 
-    // Mock EXACTLY the method called by your code
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Fix method name typo
-        eq(new BigInteger("123")), // Ensure this matches payment.getProviderId() parsed to BigInteger
-        any(BigInteger.class), 
-        any(BigInteger.class), 
-        anyString(), 
+    // Mock ONLY the interaction we're testing
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+        new BigInteger("123"), // Must match providerId
+        any(BigInteger.class),
+        any(BigInteger.class),
+        anyString(),
         anyString()
     )).thenThrow(new RuntimeException("Mocked exception"));
 
     // Execute
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
+    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(
+        Collections.singletonList(payment), 
+        "user1"
+    );
 
     // Verify
     assertNotNull(result.get(0).getComment());
+    verify(referentialServiceApi, times(1))
+        .getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any());
 }
