@@ -1,39 +1,48 @@
 @Test
 void insertPaymentLines_BackOfficeException_CoversTargetLines() {
-    // Setup data to pass earlier checks
+    // Setup data with valid fields
     PaymentLinesForModel paymentLine = new PaymentLinesForModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBorderId("123"); // Must match mocked entity's border
+    paymentLine.setEntityBorderId("123"); // Must match entity border
     List<PaymentLinesForModel> finalData = Collections.singletonList(paymentLine);
 
-    // Mock invoices & BAPs to pass amount validation
+    // Mock invoices & BAPs with NON-NULL values
+    InvoicePayableModel invoice = new InvoicePayableModel();
+    invoice.setInvoiceReference("INV123");
+    invoice.setAmount(new BigDecimal("1000.00")); // Match paymentLine amount
     when(invoiceServiceApi.getListOfInvoices(anyList()))
-        .thenReturn(Collections.singletonList(new InvoicePayableModel()));
+        .thenReturn(Collections.singletonList(invoice));
+
+    BapPayableModel bap = new BapPayableModel();
+    bap.setInvoiceReference("INV123");
+    bap.setBapAmount(new BigDecimal("1000.00")); // Match invoice amount
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
-        .thenReturn(Collections.singletonList(new BapPayableModel()));
+        .thenReturn(Collections.singletonList(bap));
 
     // Mock provider and user details
-    when(referentialServiceApi.getProviderDetails(any(), any()))
+    when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
         .thenReturn(new ProviderDetails());
+
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgrePabbo("PABBO123");
-    when(referentialServiceApi.getUserInitials(any())).thenReturn(userDetails);
+    userDetails.setCodgrePabbo("PABBO123"); // Correct field name
+    when(referentialServiceApi.getUserInitials(anyString())).thenReturn(userDetails);
 
-    // Mock entity list with matching border
+    // Mock entity with CORRECT FIELD NAME (border)
     EntityListModel entity = new EntityListModel();
-    entity.setBorder(new BigInteger("123")); // Match entityBorderId="123"
-    when(referentialServiceApi.getEntityListOfEntities()).thenReturn(List.of(entity));
+    entity.setBorder(new BigInteger("123")); // Correct field name
+    when(referentialServiceApi.getEntityListOfEntities()) // Correct method name
+        .thenReturn(Collections.singletonList(entity));
 
-    // Force exception in getBackOfficeDetails
-    when(referentialServiceApi.getBackOfficeDetails(any(), any()))
+    // Force exception in target method
+    when(referentialServiceApi.getBackOfficeDetails(anyString(), anyString())) // Correct method name
         .thenThrow(new RuntimeException("Test Exception"));
 
     // Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // Verify lines 1172-1180 are covered
+    // Verify
     assertEquals("CRESSAEG", response.getStatus());
     assertTrue(response.getErrorMessage().contains("Test Exception"));
 }
