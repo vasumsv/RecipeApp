@@ -1,5 +1,7 @@
-  @Test
-    void getRetNetRowsForManualPaymentTest_DirtyCoverage() {
+
+    @Test
+    void getRetNetRowsForManualPaymentTest() {
+        // Setup mock data
         List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
         InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
         payment.setProviderId("provider1");
@@ -23,10 +25,10 @@
         List<SettlementAccount> settlementAccounts = new ArrayList<>();
         settlementAccounts.add(new SettlementAccount());
 
-        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), anyString())).thenReturn(dates);
+        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), eq("RET"))).thenReturn(dates);
         when(invoiceServiceApi.getListOfBagDetailsForMultipleInvoices(anyList())).thenReturn(listMap);
         when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic(anyString())).thenReturn(portfolioDetails);
-        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts); // Corrected line
+        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts);
 
         Map<GroupingKey, BigDecimal> aggregateAmount = new ConcurrentHashMap<>();
         aggregateAmount.put(new GroupingKey("entity1", "USD"), new BigDecimal("200.00"));
@@ -55,8 +57,31 @@
             e.printStackTrace();
         }
 
+        // Mock the finalSize() method - since we don't have its implementation
+        try {
+            java.lang.reflect.Method finalSizeMethod = CashAllocationDomain.class.getDeclaredMethod("finalSize");
+            finalSizeMethod.setAccessible(true);
+            when(finalSizeMethod.invoke(cashAllocationDomain)).thenReturn(2); // Mocking it to return 2
+        } catch (NoSuchMethodException | java.lang.reflect.InvocationTargetException | IllegalAccessException e) {
+            e.printStackTrace();
+        }
+
+
         List<PaymentLinesModel> result = cashAllocationDomain.getRetNetRowsForManualPayment(paymentList, "user1");
 
         assertNotNull(result);
         assertEquals(1, result.size());
+        assertEquals("entity1", result.get(0).getEntity());
+        assertEquals("provider1", result.get(0).getProviderId());
+        assertEquals("Provider One", result.get(0).getProviderName());
+        assertEquals("INV123", result.get(0).getInvoicePayable().getCode());
+        assertEquals("2023-01-01", result.get(0).getSettlementDate());
+        assertEquals(2, result.get(0).getNumberOfInvoices());
+        assertEquals("USD", result.get(0).getCurrency());
+        assertEquals("+", result.get(0).getPaymentDirection()); // Based on the mock aggregateAmount
+        assertEquals("NULL", result.get(0).getPaymentMode());
+        assertEquals("Y", result.get(0).getPaymentStatus());
+        assertEquals("REF", result.get(0).getFeeType());
+        assertEquals("INV123", result.get(0).getInvoiceReference());
+        assertEquals(2, result.get(0).getNumberOfInvoices());
     }
