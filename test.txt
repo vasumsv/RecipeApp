@@ -1,87 +1,49 @@
+@BeforeEach
+    void setup() {
+        // Set invoiceRefPattern value
+        ReflectionTestUtils.setField(cashAllocationDomain, "invoiceRefPattern", "REF\\d{3}");
+    }
 
     @Test
-    void getRetNetRowsForManualPaymentTest() {
-        // Setup mock data
-        List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
+    void getNettedPaymentRowsForManualPayment_CoversAllLines() {
+        // Setup input data
         InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-        payment.setProviderId("provider1");
-        payment.setProviderName("Provider One");
-        InvoicePayable invoicePayable = new InvoicePayable();
-        invoicePayable.setCode("INV123");
-        payment.setInvoicePayable(invoicePayable);
-        payment.setInvoiceReference("REF123");
-        paymentList.add(payment);
+        payment.setProviderId("PROV123");
+        payment.setInvoiceReference("REF123"); // Matches invoiceRefPattern
+        payment.setFeederCategory("CAT1");
+        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-        PaymentDates dates = new PaymentDates();
-        dates.setSettlementDate("2023-01-01");
+        // Mock dependencies
+        BapPayableModel bap = new BapPayableModel();
+        bap.setPortfolio("PORTFOLIO1");
+        when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(any()))
+            .thenReturn(Collections.singletonList(bap));
 
-        List<Map<PayableModel, List<String>>> listMap = new ArrayList<>();
-        Map<PayableModel, List<String>> map = new HashMap<>();
-        map.put(new PayableModel(), Arrays.asList("portfolio1"));
-        listMap.add(map);
+        PortfolioAdvanceDetailResponse portfolioDetails = new PortfolioAdvanceDetailResponse();
+        portfolioDetails.setCodTrs("BDR123");
+        when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic("PORTFOLIO1"))
+            .thenReturn(portfolioDetails);
 
-        PortfolioAdvanceDetailsResponse portfolioDetails = new PortfolioAdvanceDetailsResponse();
+        SettlementsAccounts settlementAccount = new SettlementsAccounts();
+        settlementAccount.setNumbertrg1("ACC123");
+        when(referentialServiceApi.getSettlementsAccounts(anyString(), anyString(), anyString()))
+            .thenReturn(Collections.singletonList(settlementAccount));
 
-        List<SettlementAccount> settlementAccounts = new ArrayList<>();
-        settlementAccounts.add(new SettlementAccount());
+        PaymentDate paymentDates = new PaymentDate();
+        paymentDates.setValueDate("2023-10-01");
+        paymentDates.setSendingDate("2023-10-02");
+        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(paymentDates);
 
-        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), eq("RET"))).thenReturn(dates);
-        when(invoiceServiceApi.getListOfBagDetailsForMultipleInvoices(anyList())).thenReturn(listMap);
-        when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic(anyString())).thenReturn(portfolioDetails);
-        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts);
+        // Execute method
+        List<PaymentLinesModel> result = cashAllocationDomain
+            .getNettedPaymentRowsForManualPayment(paymentList, "user1");
 
-        Map<GroupingKey, BigDecimal> aggregateAmount = new ConcurrentHashMap<>();
-        aggregateAmount.put(new GroupingKey("entity1", "USD"), new BigDecimal("200.00"));
-
-        Map<GroupingKey, Integer> aggregateInvoiceCount = new ConcurrentHashMap<>();
-        aggregateInvoiceCount.put(new GroupingKey("entity1", "USD"), 2);
-
-        Map<GroupingKey, String> aggregateInvoiceReferences = new ConcurrentHashMap<>();
-        aggregateInvoiceReferences.put(new GroupingKey("entity1", "USD"), "REF1|REF2|");
-
-        // Directly set the maps for the loop using reflection (dirty but gets coverage)
-        try {
-            java.lang.reflect.Field amountField = CashAllocationDomain.class.getDeclaredField("aggregateAmount");
-            amountField.setAccessible(true);
-            amountField.set(cashAllocationDomain, aggregateAmount);
-
-            java.lang.reflect.Field countField = CashAllocationDomain.class.getDeclaredField("aggregateInvoiceCount");
-            countField.setAccessible(true);
-            countField.set(cashAllocationDomain, aggregateInvoiceCount);
-
-            java.lang.reflect.Field refField = CashAllocationDomain.class.getDeclaredField("aggregateInvoiceReferences");
-            refField.setAccessible(true);
-            refField.set(cashAllocationDomain, aggregateInvoiceReferences);
-
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
-        }
-
-        // Mock the finalSize() method - since we don't have its implementation
-        try {
-            java.lang.reflect.Method finalSizeMethod = CashAllocationDomain.class.getDeclaredMethod("finalSize");
-            finalSizeMethod.setAccessible(true);
-            when(finalSizeMethod.invoke(cashAllocationDomain)).thenReturn(2); // Mocking it to return 2
-        } catch (NoSuchMethodException | java.lang.reflect.InvocationTargetException | IllegalAccessException e) {
-            e.printStackTrace();
-        }
-
-
-        List<PaymentLinesModel> result = cashAllocationDomain.getRetNetRowsForManualPayment(paymentList, "user1");
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("entity1", result.get(0).getEntity());
-        assertEquals("provider1", result.get(0).getProviderId());
-        assertEquals("Provider One", result.get(0).getProviderName());
-        assertEquals("INV123", result.get(0).getInvoicePayable().getCode());
-        assertEquals("2023-01-01", result.get(0).getSettlementDate());
-        assertEquals(2, result.get(0).getNumberOfInvoices());
-        assertEquals("USD", result.get(0).getCurrency());
-        assertEquals("+", result.get(0).getPaymentDirection()); // Based on the mock aggregateAmount
-        assertEquals("NULL", result.get(0).getPaymentMode());
-        assertEquals("Y", result.get(0).getPaymentStatus());
-        assertEquals("REF", result.get(0).getFeeType());
-        assertEquals("INV123", result.get(0).getInvoiceReference());
-        assertEquals(2, result.get(0).getNumberOfInvoices());
+        // Verify output
+        assertFalse(result.isEmpty());
+        PaymentLinesModel model = result.get(0);
+        assertEquals("PROV123", model.getProviderId());
+        assertEquals("2023-10-01", model.getValueDate());
+        assertEquals(1, model.getNumberOfSSI());
+        assertNotNull(model.getSsiAccountCode());
     }
