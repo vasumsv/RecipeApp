@@ -1,49 +1,70 @@
 @Test
-void insertPaymentLines_CurrencyException_CoversTargetLines() {
-    // 1. Setup payment data with CURRENCY FIELD
+void insertPaymentLines_CurrencyException_CoversLines1220To1232() {
+    // 1. Setup payment data with ALL REQUIRED FIELDS
     PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
     paymentLine.setEntityBenId("123");
     paymentLine.setCurrency("USD"); // Critical for currency call
-    paymentLine.setFeeBdofId("456"); // Required for other mocks
+    paymentLine.setFeeBdofId("456"); // Required for fee mnemonic mock
+    paymentLine.setSendingDate(LocalDate.now()); // Avoid NPE in date formatting
     List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
 
-    // 2. Mock invoices & BAPs to pass validations
+    // 2. Mock invoices & BAPs to PASS VALIDATION
     InvoicePayableModel invoice = new InvoicePayableModel();
     invoice.setInvoiceReference("INV123");
-    invoice.setAmount(new BigDecimal("1000.00"));
+    invoice.setAmount(new BigDecimal("1000.00")); // Match payment amount
     when(invoiceServiceApi.getListOfInvoices(anyList()))
         .thenReturn(Collections.singletonList(invoice));
 
     BapPayableModel bap = new BapPayableModel();
     bap.setInvoiceReference("INV123");
-    bap.setBapAmount(new BigDecimal("1000.00"));
+    bap.setBapAmount(new BigDecimal("1000.00")); // Match invoice amount
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
         .thenReturn(Collections.singletonList(bap));
 
-    // 3. Mock provider/user/entity to avoid early exits
-    when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
+    // 3. Mock provider details to avoid early exit
+    when(referentialServiceApi.getProviderDetails(eq("PROV123"), anyString()))
         .thenReturn(new ProviderDetails());
 
+    // 4. Mock user details with EXACT FIELD NAME
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgcpRabbo("PABBO123");
-    when(referentialServiceApi.getUserDetails(anyString())).thenReturn(userDetails);
+    userDetails.setCodgcpRabbo("PABBO123"); // Match code's field name
+    when(referentialServiceApi.getUserDetails(eq("user1")))
+        .thenReturn(userDetails);
 
+    // 5. Mock entity list with MATCHING BenId
     EntityListModel entity = new EntityListModel();
-    entity.setBenId(new BigInteger("123"));
+    entity.setBenId(new BigInteger("123")); // Match paymentLine.entityBenId
+    entity.setEntityCode("ENTITY_CODE");
     when(referentialServiceApi.getEntityListOfEntities()))
         .thenReturn(Collections.singletonList(entity));
 
-    // 4. FORCE EXCEPTION IN CURRENCY DETAILS CALL
-    when(referentialServiceApi.getCurrencyDetails(eq("USD"))) 
+    // 6. Mock backOfficeDetails to SUCCEED
+    when(referentialServiceApi.getBackOfficeDetails(
+        eq("ENTITY_CODE"), 
+        eq("PABBO123") // From userDetails
+    )).thenReturn(new BackOfficeDetails());
+
+    // 7. Mock fee mnemonic to SUCCEED
+    when(referentialServiceApi.getFeefMnemonic(eq("456")))
+        .thenReturn("FEE_MNEMONIC");
+
+    // 8. Mock portfolio details to SUCCEED
+    when(referentialServiceApi.getPortfolioDetails(
+        eq("user1"), 
+        eq(new BigInteger("456"))
+    )).thenReturn(new PortfolioAdvanceDetailResponse());
+
+    // 9. FORCE EXCEPTION IN CURRENCY DETAILS
+    when(referentialServiceApi.getCurrencyDetails(eq("USD")))
         .thenThrow(new RuntimeException("Currency Error"));
 
-    // 5. Execute
+    // 10. Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // 6. Verify target lines (1220-1232)
+    // 11. Verify target lines (1220-1232)
     assertEquals("MESSAGE", response.getStatus());
     assertTrue(response.getErrorMessage().contains("Currency Error"));
 }
