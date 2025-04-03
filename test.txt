@@ -1,25 +1,45 @@
 @Test
-void getMettedRows_ExceptionInPaymentMode() {
-    // Setup
-    InvoicePayableModelForPayment payment = createBasePayment();
-    payment.setProviderId("123"); // Must be convertible to BigInteger (e.g., "123")
-    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+void getPaymentLinesFromPaymentReference_CoversAllLines() {
+    // Setup test data
+    String[] paymentReferences = {"REF123"};
+    
+    // Mock SrqPaymentModel with all required fields
+    SrqPaymentModel srqPayment = new SrqPaymentModel();
+    srqPayment.setProviderId("PROV123");
+    srqPayment.setPaymentCorrency("USD");
+    srqPayment.setSgEntity("ENTITY1");
+    srqPayment.setFeedtegory("CAT1");
+    srqPayment.setInvoiceReference("INV123 resoc INV456"); // Contains delimiter "resoc "
+    srqPayment.setId(100L);
+    srqPayment.setProviderName("BROKER1");
+    srqPayment.setValueDate(LocalDate.now().toString());
+    srqPayment.setSendIngbate(LocalDate.now().toString());
+    srqPayment.setPaymentAmount(new BigDecimal("1000.00"));
+    srqPayment.setPaymentType("MANUAL");
+    srqPayment.setReCode("RED123");
+    srqPayment.setComment("Test comment");
+    srqPayment.setDeliveredIt("D");
+    srqPayment.setPaymentMode("SWIFT");
+    srqPayment.setPaymentStatus("APPROVED");
 
-    // Mock the EXACT method and parameters
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Fix method name
-        eq(new BigInteger("123")),  // Matches providerId converted to BigInteger
-        any(BigInteger.class),       // entity (BigInteger)
-        any(BigInteger.class),       // feeCategory (BigInteger)
-        anyString(),                 // paymentDirection ("D" or "C")
-        anyString(),                 // currency (e.g., "USD")
-        anyString()                  // user (e.g., "user1")
-    )).thenThrow(new RuntimeException("Mocked exception"));
+    // Mock dependencies
+    when(cashAllocationRepositoryApi.findPaymentLinesFromPaymentReferences(paymentReferences))
+        .thenReturn(Collections.singletonList(srqPayment));
+
+    // Mock getsSiderails to return non-empty list
+    when(referentialServiceApi.getSettlementDetails(
+        eq("PROV123"), eq("USD"), eq("ENTITY1"), eq("CAT1")
+    )).thenReturn(Arrays.asList("ACC123", "ACC456"));
 
     // Execute
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
+    List<PaymentLinesModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReference(paymentReferences);
 
     // Verify
-    assertNotNull(result.get(0).getComment());
-    verify(referentialServiceApi, times(1))
-        .getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any(), any());
+    assertFalse(result.isEmpty());
+    PaymentLinesModel model = result.get(0);
+    assertEquals("PROV123", model.getProviderId());
+    assertEquals(2, model.getNumberOfInvoices()); // Split "INV123 resoc INV456" → 2 invoices
+    assertEquals(2, model.getNumberOfSSI()); // Mocked SSI list size
+    assertEquals("D", model.getPaymentDirection());
+    assertNotNull(model.getRe());
 }
