@@ -1,70 +1,49 @@
-@Test
-void insertPaymentLines_CurrencyException_CoversLines1220To1232() {
-    // 1. Setup payment data with ALL REQUIRED FIELDS
-    PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
-    paymentLine.setInvoiceReference("INV123");
-    paymentLine.setAmount(new BigDecimal("1000.00"));
-    paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBenId("123");
-    paymentLine.setCurrency("USD"); // Critical for currency call
-    paymentLine.setFeeBdofId("456"); // Required for fee mnemonic mock
-    paymentLine.setSendingDate(LocalDate.now()); // Avoid NPE in date formatting
-    List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
+    @Test
+    void transferFile_CoversLines143To155() throws Exception {
+        // Setup
+        LocalDate date = LocalDate.now();
+        CashAllocationModel model1 = new CashAllocationModel();
+        model1.setInvoiceMatched("INV001,INV002");
+        model1.setInvoiceUnmatched("INV003");
+        
+        CashAllocationModel model2 = new CashAllocationModel();
+        model2.setInvoiceMatched(null);
+        model2.setInvoiceUnmatched("INV004");
 
-    // 2. Mock invoices & BAPs to PASS VALIDATION
-    InvoicePayableModel invoice = new InvoicePayableModel();
-    invoice.setInvoiceReference("INV123");
-    invoice.setAmount(new BigDecimal("1000.00")); // Match payment amount
-    when(invoiceServiceApi.getListOfInvoices(anyList()))
-        .thenReturn(Collections.singletonList(invoice));
+        List<CashAllocationModel> models = Arrays.asList(model1, model2);
 
-    BapPayableModel bap = new BapPayableModel();
-    bap.setInvoiceReference("INV123");
-    bap.setBapAmount(new BigDecimal("1000.00")); // Match invoice amount
-    when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
-        .thenReturn(Collections.singletonList(bap));
+        // Mock directory path
+        ReflectionTestUtils.setField(adDomain, "directoryName", "target/test-files");
+        ReflectionTestUtils.setField(adDomain, "abftrKey", "TESTKEY");
 
-    // 3. Mock provider details to avoid early exit
-    when(referentialServiceApi.getProviderDetails(eq("PROV123"), anyString()))
-        .thenReturn(new ProviderDetails());
+        // Execute
+        String result = adDomain.transferFile(date, models);
 
-    // 4. Mock user details with EXACT FIELD NAME
-    UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgcpRabbo("PABBO123"); // Match code's field name
-    when(referentialServiceApi.getUserDetails(eq("user1")))
-        .thenReturn(userDetails);
+        // Verify
+        assertNotNull(result);
+        assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
+        
+        // Verify file operations
+        File outputFile = new File("target/test-files/" + result);
+        assertTrue(outputFile.exists());
+        
+        // Verify repository update
+        verify(cashAllocationRepositoryApi, times(3)).updateCashAllocationMode(any());
+    }
 
-    // 5. Mock entity list with MATCHING BenId
-    EntityListModel entity = new EntityListModel();
-    entity.setBenId(new BigInteger("123")); // Match paymentLine.entityBenId
-    entity.setEntityCode("ENTITY_CODE");
-    when(referentialServiceApi.getEntityListOfEntities()))
-        .thenReturn(Collections.singletonList(entity));
+    @Test
+    void transferFile_IOException_CoversCatchBlock() throws Exception {
+        // Setup
+        LocalDate date = LocalDate.now();
+        CashAllocationModel model = new CashAllocationModel();
+        model.setInvoiceMatched("INV001");
 
-    // 6. Mock backOfficeDetails to SUCCEED
-    when(referentialServiceApi.getBackOfficeDetails(
-        eq("ENTITY_CODE"), 
-        eq("PABBO123") // From userDetails
-    )).thenReturn(new BackOfficeDetails());
-
-    // 7. Mock fee mnemonic to SUCCEED
-    when(referentialServiceApi.getFeefMnemonic(eq("456")))
-        .thenReturn("FEE_MNEMONIC");
-
-    // 8. Mock portfolio details to SUCCEED
-    when(referentialServiceApi.getPortfolioDetails(
-        eq("user1"), 
-        eq(new BigInteger("456"))
-    )).thenReturn(new PortfolioAdvanceDetailResponse());
-
-    // 9. FORCE EXCEPTION IN CURRENCY DETAILS
-    when(referentialServiceApi.getCurrencyDetails(eq("USD")))
-        .thenThrow(new RuntimeException("Currency Error"));
-
-    // 10. Execute
-    InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
-
-    // 11. Verify target lines (1220-1232)
-    assertEquals("MESSAGE", response.getStatus());
-    assertTrue(response.getErrorMessage().contains("Currency Error"));
-}
+        // Force IOException using invalid characters in filename
+        ReflectionTestUtils.setField(adDomain, "directoryName", "/invalid/\0/path");
+        
+        // Execute
+        String result = adDomain.transferFile(date, List.of(model));
+        
+        // Verify exception handling
+        assertNull(result);
+    }
