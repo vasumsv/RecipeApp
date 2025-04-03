@@ -1,30 +1,25 @@
 @Test
 void getMettedRows_ExceptionInPaymentMode() {
-    // Setup test data
-    InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-    payment.setProviderId("123"); // Will trigger the exception
-    payment.setInvoiceType("APPROVED");
-    payment.setEntity("ENTITY1");
-    payment.setCurrency("USD");
-    // Set other required fields...
+    // Setup
+    InvoicePayableModelForPayment payment = createBasePayment();
+    payment.setProviderId("123");
+    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-    // Mock ONLY the interaction we're testing
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        new BigInteger("123"), // Must match providerId
-        any(BigInteger.class),
-        any(BigInteger.class),
-        anyString(),
-        anyString()
+    // Mock the method with EXACT parameters (6 args)
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Correct method name
+        eq(new BigInteger("123")),      // Matcher 1: providerId (BigInteger)
+        any(BigInteger.class),           // Matcher 2: entity (BigInteger)
+        any(BigInteger.class),           // Matcher 3: feeCategory (BigInteger)
+        anyString(),                     // Matcher 4: paymentDirection ("D" or "C")
+        anyString()                      // Matcher 5: currency (String)
+        anyString()                      // Matcher 6: user (String) <-- Add if missing
     )).thenThrow(new RuntimeException("Mocked exception"));
 
     // Execute
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(
-        Collections.singletonList(payment), 
-        "user1"
-    );
+    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
 
     // Verify
-    assertNotNull(result.get(0).getComment());
-    verify(referentialServiceApi, times(1))
-        .getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any());
+    assertNotNull(result.get(0).getComment()); // Fix syntax: result.get(0).getComment()
+    verify(referentialServiceApi, times(1))    // Fix verification syntax
+        .getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any(), any());
 }
