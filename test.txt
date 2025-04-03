@@ -1,14 +1,16 @@
 @Test
-void insertPaymentLines_BackOfficeException_CoversTargetLines() {
-    // 1. Setup payment data with valid fields
-    PaymentLinesForModel paymentLine = new PaymentLinesForModel();
+void insertPaymentLines_CurrencyException_CoversTargetLines() {
+    // 1. Setup payment data with CURRENCY FIELD
+    PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBenId("123"); // Must match entity filter
-    List<PaymentLinesForModel> finalData = Collections.singletonList(paymentLine);
+    paymentLine.setEntityBenId("123");
+    paymentLine.setCurrency("USD"); // Critical for currency call
+    paymentLine.setFeeBdofId("456"); // Required for other mocks
+    List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
 
-    // 2. Mock invoices & BAPs to pass amount validation
+    // 2. Mock invoices & BAPs to pass validations
     InvoicePayableModel invoice = new InvoicePayableModel();
     invoice.setInvoiceReference("INV123");
     invoice.setAmount(new BigDecimal("1000.00"));
@@ -21,32 +23,27 @@ void insertPaymentLines_BackOfficeException_CoversTargetLines() {
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
         .thenReturn(Collections.singletonList(bap));
 
-    // 3. Mock provider details to avoid early exit
+    // 3. Mock provider/user/entity to avoid early exits
     when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
         .thenReturn(new ProviderDetails());
 
-    // 4. Mock user details with required field
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgcpRabbo("PABBO123"); // Critical for backoffice call
+    userDetails.setCodgcpRabbo("PABBO123");
     when(referentialServiceApi.getUserDetails(anyString())).thenReturn(userDetails);
 
-    // 5. Mock entity list with matching BenId
     EntityListModel entity = new EntityListModel();
-    entity.setBenId(new BigInteger("123")); // Match paymentLine.entityBenId
-    entity.setEntityCode("ENTITY_CODE");
-    when(referentialServiceApi.getEntityListOfEntities())
+    entity.setBenId(new BigInteger("123"));
+    when(referentialServiceApi.getEntityListOfEntities()))
         .thenReturn(Collections.singletonList(entity));
 
-    // 6. Force exception in getBackOfficeDetails
-    when(referentialServiceApi.getBackOfficeDetails(
-        eq("ENTITY_CODE"), 
-        eq("PABBO123") // Matches userDetails.getCodgcpRabbo()
-    )).thenThrow(new RuntimeException("Test Exception"));
+    // 4. FORCE EXCEPTION IN CURRENCY DETAILS CALL
+    when(referentialServiceApi.getCurrencyDetails(eq("USD"))) 
+        .thenThrow(new RuntimeException("Currency Error"));
 
-    // 7. Execute
+    // 5. Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // 8. Verify lines 1192-1199 are covered
-    assertEquals("RESSAGE", response.getStatus());
-    assertTrue(response.getErrorMessage().contains("Test Exception"));
+    // 6. Verify target lines (1220-1232)
+    assertEquals("MESSAGE", response.getStatus());
+    assertTrue(response.getErrorMessage().contains("Currency Error"));
 }
