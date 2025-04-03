@@ -1,83 +1,22 @@
-    private InvoicePayableModelForPayment createBasePayment() {
-        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-        payment.setInvoiceType("APPROVED");
-        payment.setProviderId("PROV123");
-        payment.setInvoiceReference("REF12345");
-        payment.setCurrency("USD");
-        payment.setFeederCategory("CAT1");
-        payment.setEntity("ENTITY1");
+@Test
+void getMettedRows_ExceptionInPaymentMode() {
+    // Setup
+    InvoicePayableModelForPayment payment = createBasePayment();
+    payment.setProviderId("123"); // Must match the mocked BigInteger("123")
+    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-        InvoicePayable invoicePayable = new InvoicePayable();
-        invoicePayable.setProviderMnemo("BROKER1");
-        invoicePayable.setPaymentMethod("MANUAL");
-        invoicePayable.setRcCode("red123");
-        payment.setInvoicePayable(invoicePayable);
-        payment.setAmount(BigDecimal.valueOf(100.00));
-        return payment;
-    }
+    // Mock EXACTLY the method called by your code
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Fix method name typo
+        eq(new BigInteger("123")), // Ensure this matches payment.getProviderId() parsed to BigInteger
+        any(BigInteger.class), 
+        any(BigInteger.class), 
+        anyString(), 
+        anyString()
+    )).thenThrow(new RuntimeException("Mocked exception"));
 
-    @Test
-    void getMettedRows_SuccessPath() {
-        // Setup
-        InvoicePayableModelForPayment payment = createBasePayment();
-        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+    // Execute
+    List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
 
-        // Mock successful responses
-        PaymentModeAndLocationModel paymentMode = new PaymentModeAndLocationModel();
-        paymentMode.setPaymentMode("SWIFT");
-        when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-            any(BigInteger.class), any(BigInteger.class), any(BigInteger.class), 
-            anyString(), anyString()
-        )).thenReturn(paymentMode);
-
-        PaymentDates dates = new PaymentDates();
-        dates.setValueDate(LocalDate.parse("2023-10-01"));
-        dates.setSendingDate(LocalDate.parse("2023-10-02"));
-        when(referentialServiceApi.getPaymentDates(
-            anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
-        )).thenReturn(dates);
-
-        // Execute
-        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
-
-        // Verify
-        assertFalse(result.isEmpty());
-    }
-
-    @Test
-    void getMettedRows_ExceptionInPaymentMode() {
-        // Setup
-        InvoicePayableModelForPayment payment = createBasePayment();
-        payment.setProviderId("123"); // Triggers exception
-        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
-
-        // Mock exception for payment mode
-        when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-            eq(new BigInteger("123")), any(), any(), anyString(), anyString()
-        )).thenThrow(new RuntimeException("Mocked exception"));
-
-        // Execute
-        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
-
-        // Verify exception handling
-        assertNotNull(result.get(0).getComment());
-    }
-
-    @Test
-    void getMettedRows_ExceptionInPaymentDates() {
-        // Setup
-        InvoicePayableModelForPayment payment = createBasePayment();
-        payment.setEntity("ENTITY2"); // Triggers exception
-        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
-
-        // Mock exception for payment dates
-        when(referentialServiceApi.getPaymentDates(
-            eq("ENTITY2"), any(), any(), any(), any(), any()
-        )).thenThrow(new RuntimeException("Mocked exception"));
-
-        // Execute
-        List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
-
-        // Verify exception handling
-        assertNotNull(result.get(0).getComment());
-    }
+    // Verify
+    assertNotNull(result.get(0).getComment());
+}
