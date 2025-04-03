@@ -1,45 +1,39 @@
 @Test
-void getPaymentLinesFromPaymentReference_CoversAllLines() {
-    // Setup test data
-    String[] paymentReferences = {"REF123"};
-    
-    // Mock SrqPaymentModel with all required fields
-    SrqPaymentModel srqPayment = new SrqPaymentModel();
-    srqPayment.setProviderId("PROV123");
-    srqPayment.setPaymentCorrency("USD");
-    srqPayment.setSgEntity("ENTITY1");
-    srqPayment.setFeedtegory("CAT1");
-    srqPayment.setInvoiceReference("INV123 resoc INV456"); // Contains delimiter "resoc "
-    srqPayment.setId(100L);
-    srqPayment.setProviderName("BROKER1");
-    srqPayment.setValueDate(LocalDate.now().toString());
-    srqPayment.setSendIngbate(LocalDate.now().toString());
-    srqPayment.setPaymentAmount(new BigDecimal("1000.00"));
-    srqPayment.setPaymentType("MANUAL");
-    srqPayment.setReCode("RED123");
-    srqPayment.setComment("Test comment");
-    srqPayment.setDeliveredIt("D");
-    srqPayment.setPaymentMode("SWIFT");
-    srqPayment.setPaymentStatus("APPROVED");
+void insertPaymentLines_BackOfficeException_CoversTargetLines() {
+    // Setup data to pass earlier checks
+    PaymentLinesForModel paymentLine = new PaymentLinesForModel();
+    paymentLine.setInvoiceReference("INV123");
+    paymentLine.setAmount(new BigDecimal("1000.00"));
+    paymentLine.setProviderId("PROV123");
+    paymentLine.setEntityBorderId("123"); // Must match mocked entity's border
+    List<PaymentLinesForModel> finalData = Collections.singletonList(paymentLine);
 
-    // Mock dependencies
-    when(cashAllocationRepositoryApi.findPaymentLinesFromPaymentReferences(paymentReferences))
-        .thenReturn(Collections.singletonList(srqPayment));
+    // Mock invoices & BAPs to pass amount validation
+    when(invoiceServiceApi.getListOfInvoices(anyList()))
+        .thenReturn(Collections.singletonList(new InvoicePayableModel()));
+    when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
+        .thenReturn(Collections.singletonList(new BapPayableModel()));
 
-    // Mock getsSiderails to return non-empty list
-    when(referentialServiceApi.getSettlementDetails(
-        eq("PROV123"), eq("USD"), eq("ENTITY1"), eq("CAT1")
-    )).thenReturn(Arrays.asList("ACC123", "ACC456"));
+    // Mock provider and user details
+    when(referentialServiceApi.getProviderDetails(any(), any()))
+        .thenReturn(new ProviderDetails());
+    UserDetailsModel userDetails = new UserDetailsModel();
+    userDetails.setCodgrePabbo("PABBO123");
+    when(referentialServiceApi.getUserInitials(any())).thenReturn(userDetails);
+
+    // Mock entity list with matching border
+    EntityListModel entity = new EntityListModel();
+    entity.setBorder(new BigInteger("123")); // Match entityBorderId="123"
+    when(referentialServiceApi.getEntityListOfEntities()).thenReturn(List.of(entity));
+
+    // Force exception in getBackOfficeDetails
+    when(referentialServiceApi.getBackOfficeDetails(any(), any()))
+        .thenThrow(new RuntimeException("Test Exception"));
 
     // Execute
-    List<PaymentLinesModel> result = cashAllocationDomain.getPaymentLinesFromPaymentReference(paymentReferences);
+    InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // Verify
-    assertFalse(result.isEmpty());
-    PaymentLinesModel model = result.get(0);
-    assertEquals("PROV123", model.getProviderId());
-    assertEquals(2, model.getNumberOfInvoices()); // Split "INV123 resoc INV456" → 2 invoices
-    assertEquals(2, model.getNumberOfSSI()); // Mocked SSI list size
-    assertEquals("D", model.getPaymentDirection());
-    assertNotNull(model.getRe());
+    // Verify lines 1172-1180 are covered
+    assertEquals("CRESSAEG", response.getStatus());
+    assertTrue(response.getErrorMessage().contains("Test Exception"));
 }
