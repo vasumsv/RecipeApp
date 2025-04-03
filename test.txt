@@ -2,24 +2,24 @@
 void getMettedRows_ExceptionInPaymentMode() {
     // Setup
     InvoicePayableModelForPayment payment = createBasePayment();
-    payment.setProviderId("123");
+    payment.setProviderId("123"); // Must be convertible to BigInteger (e.g., "123")
     List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-    // Mock the method with EXACT parameters (6 args)
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Correct method name
-        eq(new BigInteger("123")),      // Matcher 1: providerId (BigInteger)
-        any(BigInteger.class),           // Matcher 2: entity (BigInteger)
-        any(BigInteger.class),           // Matcher 3: feeCategory (BigInteger)
-        anyString(),                     // Matcher 4: paymentDirection ("D" or "C")
-        anyString()                      // Matcher 5: currency (String)
-        anyString()                      // Matcher 6: user (String) <-- Add if missing
+    // Mock the EXACT method and parameters
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation( // Fix method name
+        eq(new BigInteger("123")),  // Matches providerId converted to BigInteger
+        any(BigInteger.class),       // entity (BigInteger)
+        any(BigInteger.class),       // feeCategory (BigInteger)
+        anyString(),                 // paymentDirection ("D" or "C")
+        anyString(),                 // currency (e.g., "USD")
+        anyString()                  // user (e.g., "user1")
     )).thenThrow(new RuntimeException("Mocked exception"));
 
     // Execute
     List<PaymentLinesModel> result = cashAllocationDomain.getMettedRows(paymentList, "user1");
 
     // Verify
-    assertNotNull(result.get(0).getComment()); // Fix syntax: result.get(0).getComment()
-    verify(referentialServiceApi, times(1))    // Fix verification syntax
+    assertNotNull(result.get(0).getComment());
+    verify(referentialServiceApi, times(1))
         .getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any(), any());
 }
