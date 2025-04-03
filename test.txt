@@ -1,67 +1,101 @@
-@Test
-    public void testUpdatePaymentLines_LineCoverage_1474_1515() {
-        // Mock dependencies
-        CashAllocationRepositoryApi cashAllocationRepositoryApi = Mockito.mock(CashAllocationRepositoryApi.class);
-        ReferentialServiceApi referentialServiceApi = Mockito.mock(ReferentialServiceApi.class);
-        SrMapper srMapper = Mockito.mock(SrMapper.class);
-        InvoiceServiceApi invoiceServiceApi = Mockito.mock(InvoiceServiceApi.class);
-        ReferentialServiceApi.UserDetails userDetails = Mockito.mock(ReferentialServiceApi.UserDetails.class);
-        ReferentialServiceApi.AccountDetails accounts = Mockito.mock(ReferentialServiceApi.AccountDetails.class);
-        ReferentialServiceApi.PaymentCheckResponse paymentCheckResponse = Mockito.mock(ReferentialServiceApi.PaymentCheckResponse.class);
-        ReferentialServiceApi.ListSslDetails listSslDetails = Mockito.mock(ReferentialServiceApi.ListSslDetails.class);
-        ReferentialServiceApi.ListCallSalesResponse listCallSalesResponse = Mockito.mock(ReferentialServiceApi.ListCallSalesResponse.class);
-        ReferentialServiceApi.Collectors collectors = Mockito.mock(ReferentialServiceApi.Collectors.class);
-        ReferentialServiceApi.ListResponse listResponse = Mockito.mock(ReferentialServiceApi.ListResponse.class);
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
-        // Create an instance of CashAllocationDomain with mocked dependencies
-        CashAllocationDomain cashAllocationDomain = new CashAllocationDomain(
-                Mockito.mock(FileProcessingService.class),
-                cashAllocationRepositoryApi,
-                Mockito.mock(KafkaTemplate.class),
-                invoiceServiceApi,
-                referentialServiceApi,
-                srMapper,
-                Mockito.mock(PaymentRepository.class),
-                Mockito.mock(MessageUtility.class)
-        );
+import java.math.BigDecimal;
+import java.util.*;
 
-        // Input data
-        String user = "testUser";
-        List<PaymentLineModel> updatePaymentLines = new ArrayList<>();
-        PaymentLineModel model = new PaymentLineModel();
-        model.setPaymentType("A"); // For the if condition on line 1474
-        model.setProviderId("provider1");
-        model.setEntity("entity1");
-        model.setFeeId("fee1");
-        model.setCurrency("USD");
-        model.setInvoiceType("type1");
-        model.setProviderId("provider1");
-        model.setProviderBankName("bank1");
-        model.setProviderBankAccNumber("account1");
-        model.setProviderBankAccIfscCode("ifsc1");
-        model.setProviderBankAccSwiftCode("swift1");
-        model.setAccountNumber("account1");
-        model.setAmount(100.0);
-        model.setSendingDate("2023-10-27");
-        model.setValueDate("2023-10-28");
-        updatePaymentLines.add(model);
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-        // Mock repository and service calls
-        Mockito.when(referentialServiceApi.getAccountDetailsFromBrmForPayment(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(accounts);
-        Mockito.when(referentialServiceApi.getUserInitials(Mockito.anyString())).thenReturn(userDetails);
-        Mockito.when(referentialServiceApi.paymentCheck(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(paymentCheckResponse);
-        Mockito.when(referentialServiceApi.getSslDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listSslDetails);
-        Mockito.when(referentialServiceApi.getCallSalesDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listCallSalesResponse);
-        Mockito.when(referentialServiceApi.getCollectors(Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listResponse);
-        Mockito.when(referentialServiceApi.getListSslDetails(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString())).thenReturn(listSslDetails);
-        Mockito.when(cashAllocationRepositoryApi.updatePaymentEntitiesByPaymentReference(Mockito.any(PaymentEntities.class))).thenReturn(1);
-        Mockito.when(cashAllocationRepositoryApi.findPaymentDetailsForInvoice(Mockito.any(PaymentDetailsForInvoice.class))).thenReturn(new ArrayList<>());
-        Mockito.when(srMapper.map(Mockito.any(PaymentLineModel.class), Mockito.any(PaymentEntities.class))).thenReturn(new PaymentEntities());
-        Mockito.when(srMapper.map(Mockito.any(PaymentLineModel.class), Mockito.any(PaymentDetailsForInvoice.class))).thenReturn(new PaymentDetailsForInvoice());
+class CashAllocationDomainTest {
 
-        // Call the method under test
-        List<PaymentLineModel> result = cashAllocationDomain.updatePaymentLines(user, updatePaymentLines);
+    @Mock
+    private ReferentialServiceApi referentialServiceApi;
 
-        // Basic assertion
-        assertNotNull(result);
+    @Mock
+    private InvoiceServiceApi invoiceServiceApi;
+
+    @InjectMocks
+    private CashAllocationDomain cashAllocationDomain;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
     }
+
+    @Test
+    void getRetNetRowsForManualPaymentTest() {
+        // Setup mock data
+        List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
+        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+        payment.setProviderId("provider1");
+        payment.setProviderName("Provider One");
+        payment.setInvoicePayable(new InvoicePayable());
+        payment.getInvoicePayable().setCode("INV123");
+        payment.setInvoiceReference("REF123");
+        paymentList.add(payment);
+
+        PaymentDates dates = new PaymentDates();
+        dates.setSettlementDate("2023-01-01");
+
+        List<Map<PayableModel, List<String>>> listMap = new ArrayList<>();
+        Map<PayableModel, List<String>> map = new HashMap<>();
+        map.put(new PayableModel(), Arrays.asList("portfolio1", "portfolio2"));
+        listMap.add(map);
+
+        PortfolioAdvanceDetailsResponse portfolioDetails = new PortfolioAdvanceDetailsResponse();
+
+        List<SettlementAccount> settlementAccounts = new ArrayList<>();
+        settlementAccounts.add(new SettlementAccount());
+
+        // Mock method calls
+        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), anyString())).thenReturn(dates);
+        when(invoiceServiceApi.getListOfBagDetailsForMultipleInvoices(anyList())).thenReturn(listMap);
+        when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic(anyString())).thenReturn(portfolioDetails);
+        when(referentialServiceApi.getSettlementAccounts(anyString(), anyString(), anyString())).thenReturn(settlementAccounts);
+
+        // Prepare grouping key and aggregate amount
+        GroupingKey groupingKey = new GroupingKey("entity1", "USD");
+        Map<GroupingKey, BigDecimal> aggregateAmount = new ConcurrentHashMap<>();
+        aggregateAmount.put(groupingKey, new BigDecimal("200.00"));
+
+        Map<GroupingKey, Integer> aggregateInvoiceCount = new ConcurrentHashMap<>();
+        aggregateInvoiceCount.put(groupingKey, 2);
+
+        Map<GroupingKey, String> aggregateInvoiceReferences = new ConcurrentHashMap<>();
+        aggregateInvoiceReferences.put(groupingKey, "REF1|REF2|");
+
+        // Set up the entry set for the loop
+        Set<Map.Entry<GroupingKey, BigDecimal>> entrySet = aggregateAmount.entrySet();
+        Iterator<Map.Entry<GroupingKey, BigDecimal>> iterator = entrySet.iterator();
+        Map.Entry<GroupingKey, BigDecimal> entry = iterator.next();
+
+        // Use reflection to set the fields in the CashAllocationDomain instance
+        try {
+            java.lang.reflect.Field aggregateAmountField = CashAllocationDomain.class.getDeclaredField("aggregateAmount");
+            aggregateAmountField.setAccessible(true);
+            aggregateAmountField.set(cashAllocationDomain, aggregateAmount);
+
+            java.lang.reflect.Field aggregateInvoiceCountField = CashAllocationDomain.class.getDeclaredField("aggregateInvoiceCount");
+            aggregateInvoiceCountField.setAccessible(true);
+            aggregateInvoiceCountField.set(cashAllocationDomain, aggregateInvoiceCount);
+
+            java.lang.reflect.Field aggregateInvoiceReferencesField = CashAllocationDomain.class.getDeclaredField("aggregateInvoiceReferences");
+            aggregateInvoiceReferencesField.setAccessible(true);
+            aggregateInvoiceReferencesField.set(cashAllocationDomain, aggregateInvoiceReferences);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
+        }
+
+        // Call the method
+        List<PaymentLinesModel> result = cashAllocationDomain.getRetNetRowsForManualPayment(paymentList, "user1");
+
+        // Assertions
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("entity1", result.get(0).getEntity());
+    }
+}
