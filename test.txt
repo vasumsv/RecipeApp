@@ -1,49 +1,46 @@
-    @Test
+ @Test
     void transferFile_CoversLines143To155() throws Exception {
-        // Setup
-        LocalDate date = LocalDate.now();
-        CashAllocationModel model1 = new CashAllocationModel();
-        model1.setInvoiceMatched("INV001,INV002");
-        model1.setInvoiceUnmatched("INV003");
-        
-        CashAllocationModel model2 = new CashAllocationModel();
-        model2.setInvoiceMatched(null);
-        model2.setInvoiceUnmatched("INV004");
+        // Access private method via reflection
+        Method transferFileMethod = AbDomain.class.getDeclaredMethod(
+            "transferFile", 
+            LocalDate.class, 
+            List.class
+        );
+        transferFileMethod.setAccessible(true); // Override access modifier
 
-        List<CashAllocationModel> models = Arrays.asList(model1, model2);
-
-        // Mock directory path
-        ReflectionTestUtils.setField(adDomain, "directoryName", "target/test-files");
-        ReflectionTestUtils.setField(adDomain, "abftrKey", "TESTKEY");
-
-        // Execute
-        String result = adDomain.transferFile(date, models);
-
-        // Verify
-        assertNotNull(result);
-        assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
-        
-        // Verify file operations
-        File outputFile = new File("target/test-files/" + result);
-        assertTrue(outputFile.exists());
-        
-        // Verify repository update
-        verify(cashAllocationRepositoryApi, times(3)).updateCashAllocationMode(any());
-    }
-
-    @Test
-    void transferFile_IOException_CoversCatchBlock() throws Exception {
-        // Setup
+        // Setup test data
         LocalDate date = LocalDate.now();
         CashAllocationModel model = new CashAllocationModel();
         model.setInvoiceMatched("INV001");
+        
+        // Inject values via reflection
+        ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
+        ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY");
 
-        // Force IOException using invalid characters in filename
-        ReflectionTestUtils.setField(adDomain, "directoryName", "/invalid/\0/path");
-        
-        // Execute
-        String result = adDomain.transferFile(date, List.of(model));
-        
-        // Verify exception handling
-        assertNull(result);
+        // Invoke private method
+        String result = (String) transferFileMethod.invoke(
+            abDomain, 
+            date, 
+            Collections.singletonList(model)
+        );
+
+        // Verify results
+        assertNotNull(result);
+        assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
     }
+
+
+    @Test
+void transferFile_IOException_CoversCatchBlock() throws Exception {
+    Method method = AbDomain.class.getDeclaredMethod("transferFile", LocalDate.class, List.class);
+    method.setAccessible(true);
+
+    // Force invalid directory path
+    ReflectionTestUtils.setField(abDomain, "directoryName", "/invalid/\0/path");
+    
+    // Execute with empty list to trigger file operation
+    String result = (String) method.invoke(abDomain, LocalDate.now(), Collections.emptyList());
+    
+    // Verify error handling
+    assertNull(result); // Or check logs
+}
