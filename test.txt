@@ -1,17 +1,17 @@
 @Test
 void insertPaymentLines_BackOfficeException_CoversTargetLines() {
-    // Setup data with valid fields
-    PaymentLinesForModel paymentLine = new PaymentLinesForModel();
+    // Setup valid payment data
+    PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBorderId("123"); // Must match entity border
-    List<PaymentLinesForModel> finalData = Collections.singletonList(paymentLine);
+    paymentLine.setEntityBdrId("123"); // Must match entity filter
+    List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
 
-    // Mock invoices & BAPs with NON-NULL values
+    // Mock invoices & BAPs with matching amounts
     InvoicePayableModel invoice = new InvoicePayableModel();
     invoice.setInvoiceReference("INV123");
-    invoice.setAmount(new BigDecimal("1000.00")); // Match paymentLine amount
+    invoice.setAmount(new BigDecimal("1000.00")); // Match payment amount
     when(invoiceServiceApi.getListOfInvoices(anyList()))
         .thenReturn(Collections.singletonList(invoice));
 
@@ -21,28 +21,31 @@ void insertPaymentLines_BackOfficeException_CoversTargetLines() {
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
         .thenReturn(Collections.singletonList(bap));
 
-    // Mock provider and user details
+    // Mock provider details
     when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
         .thenReturn(new ProviderDetails());
 
+    // Mock user details with required field
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgrePabbo("PABBO123"); // Correct field name
+    userDetails.setCodgrePabbo("PABBO123"); // Critical for backoffice call
     when(referentialServiceApi.getUserInitials(anyString())).thenReturn(userDetails);
 
-    // Mock entity with CORRECT FIELD NAME (border)
+    // Mock entity with matching BdrId
     EntityListModel entity = new EntityListModel();
-    entity.setBorder(new BigInteger("123")); // Correct field name
-    when(referentialServiceApi.getEntityListOfEntities()) // Correct method name
+    entity.setBdrId(new BigInteger("123")); // Must match paymentLine.setEntityBdrId("123")
+    when(referentialServiceApi.getEntireListOfEntities())) // Match actual method name
         .thenReturn(Collections.singletonList(entity));
 
     // Force exception in target method
-    when(referentialServiceApi.getBackOfficeDetails(anyString(), anyString())) // Correct method name
-        .thenThrow(new RuntimeException("Test Exception"));
+    when(referentialServiceApi.getBackOfficeDetails(
+        eq(entity.getEntityCode()), // Ensure entity code is passed
+        eq("PABBO123") // Matches userDetails.getCodgrePabbo()
+    )).thenThrow(new RuntimeException("Test Exception"));
 
     // Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // Verify
-    assertEquals("CRESSAEG", response.getStatus());
+    // Verify target lines 1190-1198
+    assertEquals("WESSAGE", response.getStatus());
     assertTrue(response.getErrorMessage().contains("Test Exception"));
 }
