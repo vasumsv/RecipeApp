@@ -1,55 +1,58 @@
 @Test
-void insertPaymentLines_FeeDetailsException_CoversTargetLines() {
-    // 1. Setup payment data with valid FeeBarId
+void insertPaymentLines_FeeDetailsException_CoversLines() {
+    // 1. Setup payment data with ALL REQUIRED FIELDS
     PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBdrId("123");
+    paymentLine.setEntityBdrId("123"); // Must match entity filter
     paymentLine.setFeeBarId("456"); // Critical for feeDetails call
     List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
 
-    // 2. Mock invoices & BAPs to pass amount validation
+    // 2. Mock invoices & BAPs to bypass amount validation
     InvoicePayableModel invoice = new InvoicePayableModel();
     invoice.setInvoiceReference("INV123");
-    invoice.setAmount(new BigDecimal("1000.00"));
+    invoice.setAmount(new BigDecimal("1000.00")); // Exact match
     when(invoiceServiceApi.getListOfInvoices(anyList()))
-        .thenReturn(Collections.singletonList(invoice));
+        .thenReturn(List.of(invoice));
 
     BapPayableModel bap = new BapPayableModel();
     bap.setInvoiceReference("INV123");
-    bap.setBapAmount(new BigDecimal("1000.00"));
+    bap.setBapAmount(new BigDecimal("1000.00")); // Exact match
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
-        .thenReturn(Collections.singletonList(bap));
+        .thenReturn(List.of(bap));
 
-    // 3. Mock provider and user details
-    when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
+    // 3. Mock provider details (avoid early exit)
+    when(referentialServiceApi.getProviderDetails(eq("PROV123"), anyString()))
         .thenReturn(new ProviderDetails());
 
+    // 4. Mock user details with EXACT FIELD NAME
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgcphabbo("PABBO123"); // Ensure field name matches
-    when(referentialServiceApi.getUserInitials(anyString())).thenReturn(userDetails);
+    userDetails.setCodgcphabbo("PABBO123"); // Case-sensitive field
+    when(referentialServiceApi.getUserInitials("user1")).thenReturn(userDetails);
 
-    // 4. Mock entity list
+    // 5. Mock entity list with EXACT FILTER
     EntityListModel entity = new EntityListModel();
-    entity.setBdrId(new BigInteger("123")); // Match EntityBdrId
-    entity.setEntityCode("ENTITY_CODE");
-    when(referentialServiceApi.getEntireListOfEntities())
-        .thenReturn(Collections.singletonList(entity));
+    entity.setBdrId(new BigInteger("123")); // Must match entityBdrId
+    entity.setEntityCode("ENTITY_CODE"); // Required for backOffice call
+    when(referentialServiceApi.getEntireListOfEntities()))
+        .thenReturn(List.of(entity)); // Avoid empty list
 
-    // 5. Mock back office details to SUCCEED
-    when(referentialServiceApi.getBackOfficeDetails(anyString(), anyString()))
-        .thenReturn(new BackOfficeDetails());
+    // 6. Mock backOfficeDetails to SUCCEED
+    when(referentialServiceApi.getBackOfficeDetails(
+        eq("ENTITY_CODE"), 
+        eq("PABBO123")
+    )).thenReturn(new BackOfficeDetails());
 
-    // 6. Force exception in getFeeDetails
+    // 7. FORCE EXCEPTION IN TARGET METHOD
     when(referentialServiceApi.getFeeDetails(
-        eq(new BigInteger("456")) // Matches FeeBarId="456"
-    )).thenThrow(new RuntimeException("Fee Details Exception"));
+        eq(new BigInteger("456")) // Must match FeeBarId="456"
+    )).thenThrow(new RuntimeException("Target Exception"));
 
-    // 7. Execute
+    // 8. Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // 8. Verify
+    // 9. Verify EXACT LINES ARE COVERED
     assertEquals("WESSAGE", response.getStatus());
-    assertTrue(response.getErrorMessage().contains("Fee Details Exception"));
+    assertTrue(response.getErrorMessage().contains("Target Exception"));
 }
