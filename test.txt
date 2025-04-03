@@ -1,52 +1,55 @@
 @Test
-void insertPaymentLines_BackOfficeException_CoversTargetLines() {
-    // 1. Setup payment data with valid fields
+void insertPaymentLines_FeeDetailsException_CoversTargetLines() {
+    // 1. Setup payment data with valid FeeBarId
     PaymentLinesFeoModel paymentLine = new PaymentLinesFeoModel();
     paymentLine.setInvoiceReference("INV123");
     paymentLine.setAmount(new BigDecimal("1000.00"));
     paymentLine.setProviderId("PROV123");
-    paymentLine.setEntityBdrId("123"); // Must match entity filter
+    paymentLine.setEntityBdrId("123");
+    paymentLine.setFeeBarId("456"); // Critical for feeDetails call
     List<PaymentLinesFeoModel> finalData = Collections.singletonList(paymentLine);
 
     // 2. Mock invoices & BAPs to pass amount validation
     InvoicePayableModel invoice = new InvoicePayableModel();
     invoice.setInvoiceReference("INV123");
-    invoice.setAmount(new BigDecimal("1000.00")); // Match payment amount
+    invoice.setAmount(new BigDecimal("1000.00"));
     when(invoiceServiceApi.getListOfInvoices(anyList()))
         .thenReturn(Collections.singletonList(invoice));
 
     BapPayableModel bap = new BapPayableModel();
     bap.setInvoiceReference("INV123");
-    bap.setBapAmount(new BigDecimal("1000.00")); // Match invoice amount
+    bap.setBapAmount(new BigDecimal("1000.00"));
     when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(anyList()))
         .thenReturn(Collections.singletonList(bap));
 
-    // 3. Mock provider details
+    // 3. Mock provider and user details
     when(referentialServiceApi.getProviderDetails(anyString(), anyString()))
         .thenReturn(new ProviderDetails());
 
-    // 4. Mock user details with REQUIRED FIELD (codgrePabbo)
     UserDetailsModel userDetails = new UserDetailsModel();
-    userDetails.setCodgrePabbo("PABBO123"); // Critical for backoffice call
+    userDetails.setCodgcphabbo("PABBO123"); // Ensure field name matches
     when(referentialServiceApi.getUserInitials(anyString())).thenReturn(userDetails);
 
-    // 5. Mock entity list with matching bdrId
+    // 4. Mock entity list
     EntityListModel entity = new EntityListModel();
-    entity.setBdrId(new BigInteger("123")); // Must match paymentLine.getEntityBdrId()
-    entity.setEntityCode("ENTITY_CODE"); // Required for getBackOfficeDetails
-    when(referentialServiceApi.getEntireListOfEntities()) // Exact method name
+    entity.setBdrId(new BigInteger("123")); // Match EntityBdrId
+    entity.setEntityCode("ENTITY_CODE");
+    when(referentialServiceApi.getEntireListOfEntities())
         .thenReturn(Collections.singletonList(entity));
 
-    // 6. Force exception in getBackOfficeDetails
-    when(referentialServiceApi.getBackOfficeDetails(
-        eq("ENTITY_CODE"), // Matches entity.getEntityCode()
-        eq("PABBO123")     // Matches userDetails.getCodgrePabbo()
-    )).thenThrow(new RuntimeException("Test Exception"));
+    // 5. Mock back office details to SUCCEED
+    when(referentialServiceApi.getBackOfficeDetails(anyString(), anyString()))
+        .thenReturn(new BackOfficeDetails());
+
+    // 6. Force exception in getFeeDetails
+    when(referentialServiceApi.getFeeDetails(
+        eq(new BigInteger("456")) // Matches FeeBarId="456"
+    )).thenThrow(new RuntimeException("Fee Details Exception"));
 
     // 7. Execute
     InsertPaymentResponse response = cashAllocationDomain.insertPaymentLines(finalData, "user1");
 
-    // 8. Verify target lines (1191-1198)
+    // 8. Verify
     assertEquals("WESSAGE", response.getStatus());
-    assertTrue(response.getErrorMessage().contains("Test Exception"));
+    assertTrue(response.getErrorMessage().contains("Fee Details Exception"));
 }
