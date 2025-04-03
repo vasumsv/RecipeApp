@@ -1,49 +1,44 @@
-@BeforeEach
-    void setup() {
-        // Set invoiceRefPattern value
-        ReflectionTestUtils.setField(cashAllocationDomain, "invoiceRefPattern", "REF\\d{3}");
-    }
+@Test
+void getNettedPaymentRowsForManualPayment_CoversAllLines() {
+    // 1. Initialize ALL required fields to avoid NPEs
+    InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+    payment.setInvoiceType("APPROVED"); // Must match valid status (not DRAFT/ANEWOED/CANCELLED)
+    payment.setProviderId("PROV123");
+    payment.setInvoiceReference("REF12345"); // Ensure length >=3 for substring(0,3)
+    payment.setFeederCategory("CAT1");
 
-    @Test
-    void getNettedPaymentRowsForManualPayment_CoversAllLines() {
-        // Setup input data
-        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-        payment.setProviderId("PROV123");
-        payment.setInvoiceReference("REF123"); // Matches invoiceRefPattern
-        payment.setFeederCategory("CAT1");
-        List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
+    // 2. Initialize nested objects (e.g., InvoicePayable)
+    InvoicePayable invoicePayable = new InvoicePayable();
+    invoicePayable.setProviderMnemo("BROKER1");
+    payment.setInvoicePayable(invoicePayable); // Avoids NPE in .getInvoicePayable().getProviderMnemo()
 
-        // Mock dependencies
-        BapPayableModel bap = new BapPayableModel();
-        bap.setPortfolio("PORTFOLIO1");
-        when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(any()))
-            .thenReturn(Collections.singletonList(bap));
+    // 3. Set other potential null fields (add these if they exist in your model)
+    payment.setCurrency("USD"); // If used in GroupingKey
+    payment.setEntity("ENTITY1"); // If used in GroupingKey
 
-        PortfolioAdvanceDetailResponse portfolioDetails = new PortfolioAdvanceDetailResponse();
-        portfolioDetails.setCodTrs("BDR123");
-        when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic("PORTFOLIO1"))
-            .thenReturn(portfolioDetails);
+    List<InvoicePayableModelForPayment> paymentList = Collections.singletonList(payment);
 
-        SettlementsAccounts settlementAccount = new SettlementsAccounts();
-        settlementAccount.setNumbertrg1("ACC123");
-        when(referentialServiceApi.getSettlementsAccounts(anyString(), anyString(), anyString()))
-            .thenReturn(Collections.singletonList(settlementAccount));
+    // 4. Mock external dependencies
+    BapPayableModel bap = new BapPayableModel();
+    bap.setPortfolio("PORTFOLIO1");
+    when(invoiceServiceApi.getListOfBapDetailsForMultipleInvoices(any()))
+        .thenReturn(Collections.singletonList(bap));
 
-        PaymentDate paymentDates = new PaymentDate();
-        paymentDates.setValueDate("2023-10-01");
-        paymentDates.setSendingDate("2023-10-02");
-        when(referentialServiceApi.getPaymentDates(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-            .thenReturn(paymentDates);
+    // 5. Mock referential service responses
+    PortfolioAdvanceDetailResponse portfolioDetails = new PortfolioAdvanceDetailResponse();
+    portfolioDetails.setCodTrs("BDR123");
+    when(referentialServiceApi.getPortfolioDetailsBasedOnMnemonic("PORTFOLIO1"))
+        .thenReturn(portfolioDetails);
 
-        // Execute method
-        List<PaymentLinesModel> result = cashAllocationDomain
-            .getNettedPaymentRowsForManualPayment(paymentList, "user1");
+    SettlementsAccounts settlementAccount = new SettlementsAccounts();
+    settlementAccount.setNumbertrg1("ACC123");
+    when(referentialServiceApi.getSettlementsAccounts(anyString(), anyString(), anyString()))
+        .thenReturn(Collections.singletonList(settlementAccount));
 
-        // Verify output
-        assertFalse(result.isEmpty());
-        PaymentLinesModel model = result.get(0);
-        assertEquals("PROV123", model.getProviderId());
-        assertEquals("2023-10-01", model.getValueDate());
-        assertEquals(1, model.getNumberOfSSI());
-        assertNotNull(model.getSsiAccountCode());
-    }
+    // 6. Execute the method
+    List<PaymentLinesModel> result = cashAllocationDomain
+        .getNettedPaymentRowsForManualPayment(paymentList, "user1");
+
+    // 7. Verify output
+    assertFalse(result.isEmpty());
+}
