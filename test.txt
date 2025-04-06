@@ -4,7 +4,7 @@
         Method transferFileMethod = AbDomain.class.getDeclaredMethod(
             "transferFile", 
             LocalDate.class, 
-            List.class
+            Collections.singletonList(CashAllocationModel.class).getClass().getComponentType()
         );
         transferFileMethod.setAccessible(true);
 
@@ -12,6 +12,14 @@
         LocalDate date = LocalDate.now();
         CashAllocationModel model = new CashAllocationModel();
         model.setInvoiceMatched("INV001");
+
+        // Mock Invoice
+        Invoice invoice = Mockito.mock(Invoice.class);
+        Mockito.when(invoice.getInvoicesAbList()).thenReturn(new ArrayList<>()); // Provide a non-null list
+
+        // Set the mocked Invoice object into CashAllocationModel (if needed)
+        // If your CashAllocationModel has a setInvoice(Invoice invoice) method then use this
+        // model.setInvoice(invoice);
 
         // 3. Set private fields using correct names
         ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
