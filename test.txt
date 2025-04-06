@@ -1,27 +1,7 @@
-@Test
-void getMettedPaymentRows_PaymentModeException() {
-    // 1. Create payment with valid numeric providerId
-    InvoicePayableModelForPayment payment = createBasePayment();
-    payment.setProviderId("123456"); // Must be numeric for BigInteger conversion
-    payment.setAmount(new BigDecimal("1000.00"));
-    List<InvoicePayableModelForPayment> payments = Collections.singletonList(payment);
-
-    // 2. Mock with exact method signature parameters
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        eq(new BigInteger("123456")), // optyBdrId
-        any(BigInteger.class),        // entityBdrId
-        any(BigInteger.class),        // feeBdrId
-        anyString(),                  // valueDate (from LocalDate.now())
-        anyString()                   // paymentDirection ("S" for positive amount)
-    )).thenThrow(new RuntimeException("Payment Mode Error"));
-
-    // 3. Execute
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(
-        payments, 
-        "user1"
-    );
-
-    // 4. Verify
-    assertFalse(result.isEmpty());
-    assertTrue(result.get(0).getComment().contains("Payment Mode unavailable"));
-}
+when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+    eq("123456"), // Use String instead of BigInteger
+    any(BigInteger.class),    // entityBdrId
+    any(BigInteger.class),    // feeBdrId
+    anyString(),    // valueDate
+    anyString()     // paymentDirection
+)).thenThrow(new RuntimeException("Payment Mode Error"));
