@@ -1,38 +1,40 @@
-  @Test
+ @Test
     void transferFile_CoversTargetLines() throws Exception {
-        // 1. Access private method via reflection
-        Method transferFileMethod = AbDomain.class.getDeclaredMethod(
+        // 1. Get the private method using reflection
+        Method method = AbDomain.class.getDeclaredMethod(
             "transferFile", 
             LocalDate.class, 
-            java.util.List.class // Ensure it's java.util.List
+            List.class
         );
-        transferFileMethod.setAccessible(true);
+        method.setAccessible(true);
 
-        // 2. Setup test data
+        // 2. Create test data
         LocalDate date = LocalDate.now();
         CashAllocationModel model = new CashAllocationModel();
-        model.setInvoiceMatched("INV001");
+        model.setInvoiceMatched("INV001,INV002");
 
-        // 3. Mock Invoice
-        Invoice invoice = Mockito.mock(Invoice.class);
-        Mockito.when(invoice.getInvoicesAbList()).thenReturn(new ArrayList<>()); // Provide a non-null list
-
-        // 4. Set the mocked Invoice object into CashAllocationModel
-        model.setInvoice(invoice); // Assuming CashAllocationModel has setInvoice()
-
-        // 5. Set private fields using ReflectionTestUtils
-        AbDomain abDomain = new AbDomain(); // Create instance of AbDomain
+        // 3. Set required private fields
         ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
-        ReflectionTestUtils.setField(abDomain, "abFtrKey", "TESTKEY"); // Note exact field name
-
-        // 6. Invoke private method
-        String result = (String) transferFileMethod.invoke(
+        ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY"); // Exact field name from source
+        
+        // 4. Execute the private method
+        String result = (String) method.invoke(
             abDomain, 
             date, 
             Collections.singletonList(model)
         );
 
-        // 7. Verify results
+        // 5. Verify results
         assertNotNull(result);
         assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
+        
+        // Verify file was created
+        File outputFile = new File("target/test-files/" + result);
+        assertTrue(outputFile.exists());
+    }
+
+    @AfterEach
+    void cleanup() {
+        // Delete test directory after each test
+        FileUtils.deleteQuietly(new File("target/test-files"));
     }
