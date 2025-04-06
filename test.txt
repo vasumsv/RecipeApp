@@ -1,103 +1,24 @@
-@ExtendWith(MockitoExtension.class)
-public class CashAllocationDomainTest {
-
-    @Mock
-    private ReferentialServiceApi referentialServiceApi;
-    
-    @Mock
-    private InvoiceServiceApi invoiceServiceApi;
-
-    @InjectMocks
-    private CashAllocationDomain cashAllocationDomain;
-
-    private InvoicePayableModelForPayment createBasePayment() {
-        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
-        payment.setProviderId("PROV123");
-        payment.setInvoiceReference("INV2023-456");
-        payment.setFeeCategory("CAT1");
-        payment.setEntity("ENTITY1");
-        payment.setCurrency("USD");
-        payment.setAmount(new BigDecimal("1000.00"));
-        return payment;
-    }
-}
-2. Happy Path Test
-java
-Copy
-@Test
-void getMettedPaymentRows_SuccessPath() {
-    // Given
-    List<InvoicePayableModelForPayment> payments = Collections.singletonList(createBasePayment());
-
-    // Mock valid responses
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any()))
-        .thenReturn(new PaymentModeAndLocationModel("SWIFT"));
-    
-    when(referentialServiceApi.getPaymentDates(any(), any(), any(), any(), any(), any()))
-        .thenReturn(new PaymentDates(LocalDate.now(), LocalDate.now().plusDays(1)));
-
-    // When
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(payments, "user1");
-
-    // Then
-    assertFalse(result.isEmpty());
-    assertEquals("SWIFT", result.get(0).getPaymentMode());
-}
-3. Payment Mode Exception Test
-java
-Copy
 @Test
 void getMettedPaymentRows_PaymentModeException() {
     // Given
     List<InvoicePayableModelForPayment> payments = Collections.singletonList(createBasePayment());
 
-    // Force exception
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any()))
-        .thenThrow(new RuntimeException("Payment Mode Error"));
+    // ONLY mock the dependency that will actually be used
+    when(referentialServiceApi.getPaymentModeAndSettlementLocation(
+        any(BigInteger.class),  // providerId
+        any(BigInteger.class),  // entity
+        any(BigInteger.class),  // feeCategory
+        anyString(),            // paymentDirection
+        anyString()             // currency
+    )).thenThrow(new RuntimeException("Payment Mode Error"));
 
     // When
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(payments, "user1");
+    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(
+        payments, 
+        "user1"
+    );
 
     // Then
+    assertFalse(result.isEmpty());
     assertTrue(result.get(0).getComment().contains("Payment Mode unavailable"));
-}
-4. Payment Dates Exception Test
-java
-Copy
-@Test
-void getMettedPaymentRows_PaymentDatesException() {
-    // Given
-    List<InvoicePayableModelForPayment> payments = Collections.singletonList(createBasePayment());
-
-    // Valid payment mode
-    when(referentialServiceApi.getPaymentModeAndSettlementLocation(any(), any(), any(), any(), any()))
-        .thenReturn(new PaymentModeAndLocationModel("SWIFT"));
-    
-    // Force dates exception
-    when(referentialServiceApi.getPaymentDates(any(), any(), any(), any(), any(), any()))
-        .thenThrow(new RuntimeException("Dates Error"));
-
-    // When
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(payments, "user1");
-
-    // Then
-    assertTrue(result.get(0).getComment().contains("Payment Dates unavailable"));
-}
-5. Cross-Entity Validation Test
-java
-Copy
-@Test
-void getMettedPaymentRows_CrossEntityError() {
-    // Given
-    InvoicePayableModelForPayment payment1 = createBasePayment();
-    InvoicePayableModelForPayment payment2 = createBasePayment();
-    payment2.setEntity("ENTITY2"); // Different entity
-    
-    List<InvoicePayableModelForPayment> payments = Arrays.asList(payment1, payment2);
-
-    // When
-    List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(payments, "user1");
-
-    // Then
-    assertTrue(result.get(0).getComment().contains("Cross Entity Match Not Allowed"));
 }
