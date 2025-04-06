@@ -1,24 +1,29 @@
 @Test
 void getMettedPaymentRows_PaymentModeException() {
-    // Given
-    List<InvoicePayableModelForPayment> payments = Collections.singletonList(createBasePayment());
+    // Given: Create valid payment data to ensure aggregation occurs
+    InvoicePayableModelForPayment payment = createBasePayment();
+    payment.setAmount(new BigDecimal("1000.00")); // Ensure positive amount
+    List<InvoicePayableModelForPayment> payments = Collections.singletonList(payment);
 
-    // ONLY mock the dependency that will actually be used
+    // Mock ONLY the critical dependency with precise argument matchers
     when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        any(BigInteger.class),  // providerId
-        any(BigInteger.class),  // entity
-        any(BigInteger.class),  // feeCategory
-        anyString(),            // paymentDirection
-        anyString()             // currency
+        eq(new BigInteger("PROV123")), // Exact providerId
+        any(BigInteger.class),          // Entity (from payment.setEntity("ENTITY1"))
+        any(BigInteger.class),          // Fee category (from payment.setFeeCategory("CAT1"))
+        eq("S"),                        // Payment direction (amount > 0 → "S")
+        eq("USD")                       // Currency (from payment.setCurrency("USD"))
     )).thenThrow(new RuntimeException("Payment Mode Error"));
 
-    // When
+    // When: Execute the method
     List<PaymentLinesModel> result = cashAllocationDomain.getMettedPaymentRowsForManualPayment(
         payments, 
         "user1"
     );
 
-    // Then
-    assertFalse(result.isEmpty());
-    assertTrue(result.get(0).getComment().contains("Payment Mode unavailable"));
+    // Then: Validate the error handling
+    assertFalse(result.isEmpty(), "Result should contain error response");
+    assertTrue(
+        result.get(0).getComment().contains("Payment Mode unavailable for provider PROV123 & currency USD"),
+        "Error message should mention provider and currency"
+    );
 }
