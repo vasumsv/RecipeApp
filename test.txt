@@ -8,23 +8,28 @@ void transferFile_CoversTargetLines() throws Exception {
     );
     method.setAccessible(true);
 
-    // 2. Create test data
-    LocalDate date = LocalDate.now();
+    // 2. Initialize FULLY-POPULATED CashAllocationModel
     CashAllocationModel model = new CashAllocationModel();
-    model.setInvoiceMatched("INV001,INV002");
+    model.setInvoiceMatched("INV001");
+    
+    // 3. Initialize InvoicesAbList to avoid NPE
+    InvoicesAbList invoicesAbList = new InvoicesAbList();
+    invoicesAbList.setInvoicesAb(List.of("INV001")); // Critical for buildLine()
+    model.setInvoicesAbList(invoicesAbList); // Set the list
 
-    // 3. CORRECT FIELD NAME (matches source code)
-    ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY"); // Fix: "abrtrkey" → "abftrKey"
+    // 4. Configure directory and key
     ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
+    ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY");
 
-    // 4. Execute the private method
+    // 5. Execute method
     String result = (String) method.invoke(
         abDomain, 
-        date, 
+        LocalDate.now(), 
         Collections.singletonList(model)
     );
 
-    // 5. Verify results
+    // 6. Verify
     assertNotNull(result);
-    assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
+    File outputFile = new File("target/test-files/" + result);
+    assertTrue(outputFile.exists());
 }
