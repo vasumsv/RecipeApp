@@ -1,32 +1,66 @@
  @Test
-    void cashAllocationModelList_CoversAllLines() {
-        // 1. Create test data for all scenarios
+    void cashAllocationModelList_CoversAllScenarios() {
+        // ==============================================
+        // Test Data Setup
+        // ==============================================
         List<String> lines = Arrays.asList(
-            // Case 1: Normal line with length >515
-            "1VALID_ACCT_1234567890XXXX20231031REF1234567890  D000000012345678901234567890INVREFERENCELONG".replace(" ", "").toUpperCase(Locale.FRENCH),
+            // 1. Valid long line (>515 characters)
+            "1VALIDACC_501061855XXXX20231031REF1234567890  D000000123456789012345678901234567890INVOICEREFERENCELONGEXTRA"
+                .replace(" ", "").toUpperCase(Locale.FRENCH),
 
-            // Case 2: Line triggering ignore conditions
-            "2SHORTLINE_T".toUpperCase(Locale.FRENCH),
+            // 2. Line to be ignored (starts with '2' and ends with 'T')
+            "2SHORTLINE_WITH_T_ENDT".toUpperCase(Locale.FRENCH),
 
-            // Case 3: GAIA_WKB_FILE account
-            "1" + CashAllocationDomain.ACCOUNT_NUMBER_1 + "20231031REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
+            // 3. GAIA_WKB_FILE account (ACCOUNT_NUMBER_1)
+            "1" + CashAllocationDomain.ACCOUNT_NUMBER_1 + "20231031REF1234567890INVALID_INVOICE_REF"
+                .replace(" ", "").toUpperCase(Locale.FRENCH),
 
-            // Case 4: GAIA_WKB_EEFE_FILE account
-            "1300030697XXXXXXX20231031REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
+            // 4. GAIA_WKB_EEFE_FILE account (300030697)
+            "1300030697XXXXXXX20231031REF1234567890INVALID_REF"
+                .replace(" ", "").toUpperCase(Locale.FRENCH),
 
-            // Case 5: Bad date format
-            "1BAD_ACCT_XXXXXXXXXXXX2023xx31REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
+            // 5. Invalid date format
+            "1BAD_DATE_ACCTXXXX20231341REF1234567890  D000000012345678901234567890INVREF"
+                .replace(" ", "").toUpperCase(Locale.FRENCH),
 
-            // Case 6: Invalid amount format
-            "1BAD_AMOUNT_ACCTXXXX20231031REF1234567890  DXXXXXX12345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH)
+            // 6. Invalid amount format
+            "1BAD_AMOUNT_ACCTXXXX20231031REF1234567890  DXXXXXX12345678901234567890INVREF"
+                .replace(" ", "").toUpperCase(Locale.FRENCH),
+
+            // 7. Short line (uses supplementary details)
+            String.format("%-157s", "1SHORTLINE").replace(' ', 'X')
+                .toUpperCase(Locale.FRENCH)
         );
 
-        // 2. Execute method with mixed scenarios
+        // ==============================================
+        // Execute Method
+        // ==============================================
         List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
             lines,
-            "GAIA_WKB_FILE" // Test GAIA file handling
+            "GAIA_WKB_FILE"
         );
 
-        // 3. Verify basic outcomes
-        assertTrue(result.size() >= 2); // At least 2 valid models
+        // ==============================================
+        // Verification
+        // ==============================================
+        // At least 2 valid models should be created
+        assertTrue(result.size() >= 2, 
+            "Should process at least valid long line and short line");
+
+        // Verify amount parsing
+        CashAllocationModel validModel = result.get(0);
+        assertTrue(validModel.getFinalAmount().compareTo(BigDecimal.ZERO) != 0);
+
+        // Verify date parsing
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
+            Date expectedDate = sdf.parse("20231031");
+            assertEquals(expectedDate, validModel.getDate());
+        } catch (Exception e) {
+            fail("Date parsing failed");
+        }
+
+        // Verify GAIA account filtering
+        assertEquals(2, result.size(), 
+            "GAIA account lines should be filtered out");
     }
