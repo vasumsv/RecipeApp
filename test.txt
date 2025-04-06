@@ -1,8 +1,8 @@
     @Test
     void testTransferFile_Lines131To145() throws Exception {
-        AbDomain abDomain = new AbDomain(); // Assuming AbDomain has a default constructor
+        AbDomain abDomain = new AbDomain(); 
 
-        // Mocking dependencies if any (e.g., CashAllocationModel, Invoice)
+        // Mocking CashAllocationModel
         CashAllocationModel cashAllocationModel = Mockito.mock(CashAllocationModel.class);
         Mockito.when(cashAllocationModel.getInvoiceMatched()).thenReturn("invoice1,invoice2");
         Mockito.when(cashAllocationModel.getInvoiceUnmatched()).thenReturn("invoice3");
@@ -10,23 +10,20 @@
         List<CashAllocationModel> cashAllocationModelList = new ArrayList<>();
         cashAllocationModelList.add(cashAllocationModel);
 
-        // Setting up a dummy directory
+        // Setup a dummy directory and file
         File dir = new File("testDir");
         dir.mkdir();
-
-        // Setting up a dummy file
-        String fileName = "testFile.csv";
-        File file = new File(dir, fileName);
+        File file = new File(dir, "testFile.csv");
         FileOutputStream fos = new FileOutputStream(file);
 
-        // Accessing the private method using reflection
+        // Access the private method using reflection
         Method transferFileMethod = AbDomain.class.getDeclaredMethod("transferFile", File.class, List.class);
         transferFileMethod.setAccessible(true);
 
-        // Invoking the method
+        // Invoke the method
         transferFileMethod.invoke(abDomain, dir, cashAllocationModelList);
 
-        // Basic assertions to check if the file was written to (logic check, not content)
+        // Basic assertion: check if the file was written to
         assertTrue(file.length() > 0);
 
         // Cleanup
