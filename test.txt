@@ -1,10 +1,10 @@
- @Test
+  @Test
     void transferFile_CoversTargetLines() throws Exception {
         // 1. Access private method via reflection
         Method transferFileMethod = AbDomain.class.getDeclaredMethod(
             "transferFile", 
             LocalDate.class, 
-            Collections.singletonList(CashAllocationModel.class).getClass().getComponentType()
+            java.util.List.class // Ensure it's java.util.List
         );
         transferFileMethod.setAccessible(true);
 
@@ -13,26 +13,26 @@
         CashAllocationModel model = new CashAllocationModel();
         model.setInvoiceMatched("INV001");
 
-        // Mock Invoice
+        // 3. Mock Invoice
         Invoice invoice = Mockito.mock(Invoice.class);
         Mockito.when(invoice.getInvoicesAbList()).thenReturn(new ArrayList<>()); // Provide a non-null list
 
-        // Set the mocked Invoice object into CashAllocationModel (if needed)
-        // If your CashAllocationModel has a setInvoice(Invoice invoice) method then use this
-        // model.setInvoice(invoice);
+        // 4. Set the mocked Invoice object into CashAllocationModel
+        model.setInvoice(invoice); // Assuming CashAllocationModel has setInvoice()
 
-        // 3. Set private fields using correct names
+        // 5. Set private fields using ReflectionTestUtils
+        AbDomain abDomain = new AbDomain(); // Create instance of AbDomain
         ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
         ReflectionTestUtils.setField(abDomain, "abFtrKey", "TESTKEY"); // Note exact field name
 
-        // 4. Invoke private method
+        // 6. Invoke private method
         String result = (String) transferFileMethod.invoke(
             abDomain, 
             date, 
             Collections.singletonList(model)
         );
 
-        // 5. Verify results
+        // 7. Verify results
         assertNotNull(result);
         assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES"));
     }
