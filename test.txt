@@ -1,18 +1,18 @@
 @Test
 void getMettedPaymentRows_PaymentModeException() {
-    // 1. Create payment with NUMERIC providerId
+    // 1. Create payment with valid numeric providerId
     InvoicePayableModelForPayment payment = createBasePayment();
-    payment.setProviderId("123456"); // Must be numeric
+    payment.setProviderId("123456"); // Must be numeric for BigInteger conversion
     payment.setAmount(new BigDecimal("1000.00"));
     List<InvoicePayableModelForPayment> payments = Collections.singletonList(payment);
 
-    // 2. Mock with numeric providerId
+    // 2. Mock with exact method signature parameters
     when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-        eq(new BigInteger("123456")), // Now valid
-        any(BigInteger.class), 
-        any(BigInteger.class), 
-        eq("S"), 
-        eq("USD")
+        eq(new BigInteger("123456")), // optyBdrId
+        any(BigInteger.class),        // entityBdrId
+        any(BigInteger.class),        // feeBdrId
+        anyString(),                  // valueDate (from LocalDate.now())
+        anyString()                   // paymentDirection ("S" for positive amount)
     )).thenThrow(new RuntimeException("Payment Mode Error"));
 
     // 3. Execute
