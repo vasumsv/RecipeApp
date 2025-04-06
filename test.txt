@@ -1,113 +1,32 @@
-@Test
-void transferFile_SuccessfulExecution() throws Exception {
-    // 1. Access private method via reflection
-    Method method = AbDomain.class.getDeclaredMethod(
-        "transferFile", 
-        LocalDate.class, 
-        List.class
-    );
-    method.setAccessible(true);
+ @Test
+    void cashAllocationModelList_CoversAllLines() {
+        // 1. Create test data for all scenarios
+        List<String> lines = Arrays.asList(
+            // Case 1: Normal line with length >515
+            "1VALID_ACCT_1234567890XXXX20231031REF1234567890  D000000012345678901234567890INVREFERENCELONG".replace(" ", "").toUpperCase(Locale.FRENCH),
 
-    // 2. Create fully populated test model
-    CashAllocationModel model = new CashAllocationModel();
-    model.setInvoiceMatched("INV001,INV002");
-    model.setInvoiceUnmatched("INV003");
-    model.setCurrency("USD");
-    model.setPaymentAmount(new BigDecimal("1000.00"));
-    
-    // Initialize nested objects
-    InvoicesAbList invoicesAb = new InvoicesAbList();
-    invoicesAb.setInvoicesAb(List.of("INV001", "INV002"));
-    model.setInvoicesAbList(invoicesAb);
+            // Case 2: Line triggering ignore conditions
+            "2SHORTLINE_T".toUpperCase(Locale.FRENCH),
 
-    // 3. Configure directory and key
-    ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
-    ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY");
+            // Case 3: GAIA_WKB_FILE account
+            "1" + CashAllocationDomain.ACCOUNT_NUMBER_1 + "20231031REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
 
-    // 4. Mock repository call
-    doNothing().when(cashAllocationRepositoryApi).updateCashAllocationMode(any());
+            // Case 4: GAIA_WKB_EEFE_FILE account
+            "1300030697XXXXXXX20231031REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
 
-    // 5. Execute
-    String result = (String) method.invoke(
-        abDomain, 
-        LocalDate.of(2023, 12, 15), 
-        Collections.singletonList(model)
-    );
+            // Case 5: Bad date format
+            "1BAD_ACCT_XXXXXXXXXXXX2023xx31REF1234567890  D000000012345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH),
 
-    // 6. Verify results
-    assertNotNull(result);
-    assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES.20231215.csv"));
-    
-    File outputFile = new File("target/test-files/" + result);
-    assertTrue(outputFile.exists());
-    assertTrue(outputFile.length() > 0);
-}
-Test Case 2: IOException Handling
-java
-Copy
-@Test
-void transferFile_IOExceptionHandling() throws Exception {
-    Method method = AbDomain.class.getDeclaredMethod(
-        "transferFile", 
-        LocalDate.class, 
-        List.class
-    );
-    method.setAccessible(true);
+            // Case 6: Invalid amount format
+            "1BAD_AMOUNT_ACCTXXXX20231031REF1234567890  DXXXXXX12345678901234567890INVREF".replace(" ", "").toUpperCase(Locale.FRENCH)
+        );
 
-    // Force invalid directory path
-    ReflectionTestUtils.setField(abDomain, "directoryName", "/invalid/\0/path");
-    
-    String result = (String) method.invoke(
-        abDomain, 
-        LocalDate.now(), 
-        Collections.emptyList()
-    );
-    
-    assertNull(result);
-    // Verify error logs if possible
-}
-Test Case 3: Empty Input Handling
-java
-Copy
-@Test
-void transferFile_EmptyInputList() throws Exception {
-    Method method = AbDomain.class.getDeclaredMethod(
-        "transferFile", 
-        LocalDate.class, 
-        List.class
-    );
-    method.setAccessible(true);
+        // 2. Execute method with mixed scenarios
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
+            lines,
+            "GAIA_WKB_FILE" // Test GAIA file handling
+        );
 
-    String result = (String) method.invoke(
-        abDomain, 
-        LocalDate.now(), 
-        Collections.emptyList()
-    );
-    
-    assertNull(result);
-}
-Test Case 4: Null InvoiceMatched Handling
-java
-Copy
-@Test
-void transferFile_NullInvoiceMatched() throws Exception {
-    Method method = AbDomain.class.getDeclaredMethod(
-        "transferFile", 
-        LocalDate.class, 
-        List.class
-    );
-    method.setAccessible(true);
-
-    CashAllocationModel model = new CashAllocationModel();
-    model.setInvoiceUnmatched("INV004");
-    
-    String result = (String) method.invoke(
-        abDomain, 
-        LocalDate.now(), 
-        Collections.singletonList(model)
-    );
-    
-    assertNotNull(result);
-    File outputFile = new File("target/test-files/" + result);
-    assertTrue(outputFile.exists());
-}
+        // 3. Verify basic outcomes
+        assertTrue(result.size() >= 2); // At least 2 valid models
+    }
