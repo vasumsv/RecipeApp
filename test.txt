@@ -1,5 +1,5 @@
 @Test
-void transferFile_CoversTargetLines() throws Exception {
+void transferFile_SuccessfulExecution() throws Exception {
     // 1. Access private method via reflection
     Method method = AbDomain.class.getDeclaredMethod(
         "transferFile", 
@@ -8,27 +8,105 @@ void transferFile_CoversTargetLines() throws Exception {
     );
     method.setAccessible(true);
 
-    // 2. Initialize FULLY-POPULATED CashAllocationModel
+    // 2. Create fully populated test model
     CashAllocationModel model = new CashAllocationModel();
-    model.setInvoiceMatched("INV001");
+    model.setInvoiceMatched("INV001,INV002");
+    model.setInvoiceUnmatched("INV003");
+    model.setCurrency("USD");
+    model.setPaymentAmount(new BigDecimal("1000.00"));
     
-    // 3. Initialize InvoicesAbList to avoid NPE
-    InvoicesAbList invoicesAbList = new InvoicesAbList();
-    invoicesAbList.setInvoicesAb(List.of("INV001")); // Critical for buildLine()
-    model.setInvoicesAbList(invoicesAbList); // Set the list
+    // Initialize nested objects
+    InvoicesAbList invoicesAb = new InvoicesAbList();
+    invoicesAb.setInvoicesAb(List.of("INV001", "INV002"));
+    model.setInvoicesAbList(invoicesAb);
 
-    // 4. Configure directory and key
+    // 3. Configure directory and key
     ReflectionTestUtils.setField(abDomain, "directoryName", "target/test-files");
     ReflectionTestUtils.setField(abDomain, "abftrKey", "TESTKEY");
 
-    // 5. Execute method
+    // 4. Mock repository call
+    doNothing().when(cashAllocationRepositoryApi).updateCashAllocationMode(any());
+
+    // 5. Execute
+    String result = (String) method.invoke(
+        abDomain, 
+        LocalDate.of(2023, 12, 15), 
+        Collections.singletonList(model)
+    );
+
+    // 6. Verify results
+    assertNotNull(result);
+    assertTrue(result.contains("TESTKEY.ABA_PAID_INVOICES.20231215.csv"));
+    
+    File outputFile = new File("target/test-files/" + result);
+    assertTrue(outputFile.exists());
+    assertTrue(outputFile.length() > 0);
+}
+Test Case 2: IOException Handling
+java
+Copy
+@Test
+void transferFile_IOExceptionHandling() throws Exception {
+    Method method = AbDomain.class.getDeclaredMethod(
+        "transferFile", 
+        LocalDate.class, 
+        List.class
+    );
+    method.setAccessible(true);
+
+    // Force invalid directory path
+    ReflectionTestUtils.setField(abDomain, "directoryName", "/invalid/\0/path");
+    
+    String result = (String) method.invoke(
+        abDomain, 
+        LocalDate.now(), 
+        Collections.emptyList()
+    );
+    
+    assertNull(result);
+    // Verify error logs if possible
+}
+Test Case 3: Empty Input Handling
+java
+Copy
+@Test
+void transferFile_EmptyInputList() throws Exception {
+    Method method = AbDomain.class.getDeclaredMethod(
+        "transferFile", 
+        LocalDate.class, 
+        List.class
+    );
+    method.setAccessible(true);
+
+    String result = (String) method.invoke(
+        abDomain, 
+        LocalDate.now(), 
+        Collections.emptyList()
+    );
+    
+    assertNull(result);
+}
+Test Case 4: Null InvoiceMatched Handling
+java
+Copy
+@Test
+void transferFile_NullInvoiceMatched() throws Exception {
+    Method method = AbDomain.class.getDeclaredMethod(
+        "transferFile", 
+        LocalDate.class, 
+        List.class
+    );
+    method.setAccessible(true);
+
+    CashAllocationModel model = new CashAllocationModel();
+    model.setInvoiceUnmatched("INV004");
+    
     String result = (String) method.invoke(
         abDomain, 
         LocalDate.now(), 
         Collections.singletonList(model)
     );
-
-    // 6. Verify
+    
     assertNotNull(result);
     File outputFile = new File("target/test-files/" + result);
     assertTrue(outputFile.exists());
