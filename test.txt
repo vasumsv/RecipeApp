@@ -1,103 +1,11 @@
- @Test
-    void testBuildLine_InvoiceTypeNotNull_StatusSENT() {
-        // Arrange
-        when(invoiceAb.getInvoiceType()).thenReturn("CHILD_INVOICE_TYPE");
-        when(invoiceServiceApi.getParentInvoiceRef(invoiceAb)).thenReturn(invoiceAb);
-        when(invoiceAb.getPartiallySettledAmount()).thenReturn("50.00");
-        when(invoiceAb.getInvoiceStatus()).thenReturn("SENT");
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getInvoiceReferenceAD()).thenReturn("REF123");
-        when(invoiceAb.getGctptyDrId()).thenReturn("DR456");
-        when(invoiceAb.getInvoiceReference()).thenReturn("INV789");
-        when(invoiceAb.getCreatedDate()).thenReturn(LocalDateTime.now());
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getTotalInvoiceAmount()).thenReturn("100.00");
-
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("UTC"));
-        String formattedCreatedDate = dateFormatter.format(LocalDateTime.now());
-        String formattedValueDate = dateFormatter.format(LocalDateTime.now());
-
-        // Act
-        String result = abDomain.buildLine(cashAllocationModel, invoiceAb);
-
-        // Assert
-        String expected = "REF123;DR456;INV789;SENT;" + formattedCreatedDate + ";" + formattedValueDate + ";100.00;";
-        assertEquals(expected, result);
+protected Provision[] mapListToArray(List<Provision> provisionList) {
+    if (provisionList == null) {
+        return new Provision[0]; // Correct: Directly return an empty Provision array
     }
-
-    @Test
-    void testBuildLine_InvoiceTypeNotNull_StatusNotSENT() {
-        // Arrange
-        when(invoiceAb.getInvoiceType()).thenReturn("CHILD_INVOICE_TYPE");
-        when(invoiceServiceApi.getParentInvoiceRef(invoiceAb)).thenReturn(invoiceAb);
-        when(invoiceAb.getPartiallySettledAmount()).thenReturn("50.00");
-        when(invoiceAb.getInvoiceStatus()).thenReturn("DRAFT"); // Different status
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getInvoiceReferenceAD()).thenReturn("REF123");
-        when(invoiceAb.getGctptyDrId()).thenReturn("DR456");
-        when(invoiceAb.getInvoiceReference()).thenReturn("INV789");
-        when(invoiceAb.getCreatedDate()).thenReturn(LocalDateTime.now());
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getTotalInvoiceAmount()).thenReturn("100.00");
-
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("UTC"));
-        String formattedCreatedDate = dateFormatter.format(LocalDateTime.now());
-        String formattedValueDate = dateFormatter.format(LocalDateTime.now());
-
-        // Act
-        String result = abDomain.buildLine(cashAllocationModel, invoiceAb);
-
-        // Assert
-        String expected = "REF123;DR456;INV789;DRAFT;" + formattedCreatedDate + ";" + formattedValueDate + ";100.00;";
-        assertEquals(expected, result);
+    Provision[] provisionArray = new Provision[provisionList.size()];
+    int i = 0;
+    for (Provision provision : provisionList) {
+        provisionArray[i++] = provision;
     }
-
-    @Test
-    void testBuildLine_InvoiceTypeNull_StatusSENT() {
-        // Arrange
-        when(invoiceAb.getInvoiceType()).thenReturn(null); // Invoice type is null
-        when(invoiceAb.getInvoiceStatus()).thenReturn("SENT");
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getInvoiceReferenceAD()).thenReturn("REF123");
-        when(invoiceAb.getGctptyDrId()).thenReturn("DR456");
-        when(invoiceAb.getInvoiceReference()).thenReturn("INV789");
-        when(invoiceAb.getCreatedDate()).thenReturn(LocalDateTime.now());
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getTotalInvoiceAmount()).thenReturn("100.00");
-
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("UTC"));
-        String formattedCreatedDate = dateFormatter.format(LocalDateTime.now());
-        String formattedValueDate = dateFormatter.format(LocalDateTime.now());
-
-        // Act
-        String result = abDomain.buildLine(cashAllocationModel, invoiceAb);
-
-        // Assert
-        String expected = "REF123;DR456;INV789;SENT;" + formattedCreatedDate + ";" + formattedValueDate + ";100.00;";
-        assertEquals(expected, result);
-    }
-
-    @Test
-    void testBuildLine_InvoiceTypeNull_StatusNotSENT() {
-        // Arrange
-        when(invoiceAb.getInvoiceType()).thenReturn(null); // Invoice type is null
-        when(invoiceAb.getInvoiceStatus()).thenReturn("PENDING"); // Different status
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getInvoiceReferenceAD()).thenReturn("REF123");
-        when(invoiceAb.getGctptyDrId()).thenReturn("DR456");
-        when(invoiceAb.getInvoiceReference()).thenReturn("INV789");
-        when(invoiceAb.getCreatedDate()).thenReturn(LocalDateTime.now());
-        when(cashAllocationModel.getValueDate()).thenReturn(LocalDateTime.now());
-        when(invoiceAb.getTotalInvoiceAmount()).thenReturn("100.00");
-
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("UTC"));
-        String formattedCreatedDate = dateFormatter.format(LocalDateTime.now());
-        String formattedValueDate = dateFormatter.format(LocalDateTime.now());
-
-        // Act
-        String result = abDomain.buildLine(cashAllocationModel, invoiceAb);
-
-        // Assert
-        String expected = "REF123;DR456;INV789;PENDING;" + formattedCreatedDate + ";" + formattedValueDate + ";100.00;";
-        assertEquals(expected, result);
-    }
+    return provisionArray;
+}
