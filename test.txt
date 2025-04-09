@@ -1,7 +1,137 @@
-when(referentialServiceApi.getPaymentModeAndSettlementLocation(
-    eq("123456"), // Use String instead of BigInteger
-    any(BigInteger.class),    // entityBdrId
-    any(BigInteger.class),    // feeBdrId
-    anyString(),    // valueDate
-    anyString()     // paymentDirection
-)).thenThrow(new RuntimeException("Payment Mode Error"));
+    @Mock
+    private InvoiceServiceApi invoiceServiceApi;
+
+    @InjectMocks
+    private AbDomain abDomain;
+
+    private CashAllLocationModel model;
+    private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    @BeforeEach
+    void setUp() {
+        model = new CashAllLocationModel();
+        model.setCreateDate(Date.from(Instant.now()));
+        model.setValueDate(Date.from(Instant.now()));
+    }
+
+    // --- Test Cases ---
+
+    @Test
+    void buildLine_ChildInvoiceType_StatusNotSent_UsesParentAmount() {
+        // Setup child invoice
+        InvoiceABSd2 childInvoice = new InvoiceABSd2();
+        childInvoice.setInvoiceType(Constant.CHILD_INVOICE_TYPE);
+        childInvoice.setParentInvoiceRef("PARENT_REF");
+        childInvoice.setInvoiceStatus("PENDING");
+        childInvoice.setTotalInvoiceAmount(1000.0);
+
+        // Setup parent invoice
+        InvoiceABSd2 parentInvoice = new InvoiceABSd2();
+        parentInvoice.setPartiallySetItemAmount(500.0);
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(childInvoice)));
+        when(invoiceServiceApi.getADInvoice(eq("PARENT_REF")))
+            .thenReturn(new InvoicesAbList(List.of(parentInvoice)));
+
+        // Execute
+        String result = abDomain.buildLine(model, "INVOICE_123");
+
+        // Assert
+        assertTrue(result.contains("500.0"), "Should use parent's partiallySetItemAmount");
+        assertTrue(result.contains(childInvoice.getInvoiceReferenceAb()), "Includes child invoice reference");
+    }
+
+    @Test
+    void buildLine_ChildInvoiceType_StatusSent_SetsAmountToZero() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceType(Constant.CHILD_INVOICE_TYPE);
+        invoice.setInvoiceStatus(Constant.SENT); // Overrides amount
+        invoice.setTotalInvoiceAmount(1000.0);
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+        assertTrue(result.contains("0"), "Status=SENT must force amount=0");
+    }
+
+    @Test
+    void buildLine_NonChildInvoiceType_StatusNotSent_UsesTotalAmount() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceType("STANDARD");
+        invoice.setTotalInvoiceAmount(200.0);
+        invoice.setInvoiceStatus("PENDING");
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+        assertTrue(result.contains("200.0"), "Should use totalInvoiceAmount");
+    }
+
+    @Test
+    void buildLine_NonChildInvoiceType_StatusSent_SetsAmountToZero() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceType("STANDARD");
+        invoice.setInvoiceStatus(Constant.SENT);
+        invoice.setTotalInvoiceAmount(200.0);
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+        assertTrue(result.contains("0"), "Status=SENT must force amount=0");
+    }
+
+    @Test
+    void buildLine_NullInvoiceType_StatusNotSent_UsesTotalAmount() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceType(null);
+        invoice.setTotalInvoiceAmount(150.0);
+        invoice.setInvoiceStatus("PENDING");
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+        assertTrue(result.contains("150.0"), "Should use totalInvoiceAmount when type=null");
+    }
+
+    @Test
+    void buildLine_NullInvoiceType_StatusSent_SetsAmountToZero() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceType(null);
+        invoice.setInvoiceStatus(Constant.SENT);
+        invoice.setTotalInvoiceAmount(150.0);
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+        assertTrue(result.contains("0"), "Status=SENT must force amount=0 even if type=null");
+    }
+
+    @Test
+    void buildLine_VerifyAllFieldsFormattedCorrectly() {
+        InvoiceABSd2 invoice = new InvoiceABSd2();
+        invoice.setInvoiceReferenceAb("INV_AB_123");
+        invoice.setCitySabrio("PARIS");
+        invoice.setInvoiceReference("INV_REF");
+        invoice.setInvoiceStatus("PENDING");
+        invoice.setTotalInvoiceAmount(300.0);
+
+        when(invoiceServiceApi.getADInvoice(eq("INVOICE_123")))
+            .thenReturn(new InvoicesAbList(List.of(invoice)));
+
+        String result = abDomain.buildLine(model, "INVOICE_123");
+
+        // Verify all fields are present and delimited correctly
+        String expectedPattern = String.join(Constant.SENTCOLOM,
+            "INV_AB_123", "PARIS", "INV_REF", "PENDING",
+            dateFormatter.format(model.getCreateDate().toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()),
+            dateFormatter.format(model.getValueDate().toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()),
+            "300.0"
+        );
+        assertEquals(expectedPattern, result, "Output format mismatch");
+    }
