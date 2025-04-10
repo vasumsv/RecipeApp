@@ -1,11 +1,58 @@
-protected Provision[] mapListToArray(List<Provision> provisionList) {
-    if (provisionList == null) {
-        return new Provision[0]; // Correct: Directly return an empty Provision array
+   @Mock
+    private ReferentialServiceApi referentialServiceApi;
+
+    @InjectMocks
+    private CashAllocationDomain cashAllocationDomain;
+
+    // Test when getPaymentDates() throws an exception
+    @Test
+    void getNettedRows_WhenGetPaymentDatesThrowsException_ReturnsComment() throws Exception {
+        // Setup payment list with required data
+        List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
+        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+        payment.setProviderId("123");
+        payment.setFecCategory("CAT1");
+        payment.setInvoiceReference("INV_REF");
+        paymentList.add(payment);
+
+        // Mock getPaymentDates to throw exception
+        when(referentialServiceApi.getPaymentDates(
+            anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        )).thenThrow(new RuntimeException("DB error"));
+
+        // Execute method
+        List<PaymentLinesModel> result = cashAllocationDomain.getNettedRows(paymentList, "user");
+
+        // Assertions
+        assertEquals(1, result.size());
+        assertTrue(result.get(0).getComment().contains("Payment Dates unavailable for entity"));
     }
-    Provision[] provisionArray = new Provision[provisionList.size()];
-    int i = 0;
-    for (Provision provision : provisionList) {
-        provisionArray[i++] = provision;
+
+    // Test when getS3Details() throws an exception
+    @Test
+    void getNettedRows_WhenGetS3DetailsThrowsException_ReturnsComment() throws Exception {
+        // Setup payment list
+        List<InvoicePayableModelForPayment> paymentList = new ArrayList<>();
+        InvoicePayableModelForPayment payment = new InvoicePayableModelForPayment();
+        payment.setProviderId("456");
+        payment.setFecCategory("CAT2");
+        paymentList.add(payment);
+
+        // Mock getPaymentDates to return valid object
+        PaymentDates dates = new PaymentDates();
+        when(referentialServiceApi.getPaymentDates(
+            anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        )).thenReturn(dates);
+
+        // Mock getS3Details to throw exception (assuming it's part of ReferentialServiceApi)
+        when(referentialServiceApi.getS3Details(
+            anyString(), anyString(), anyString(), anyString()
+        )).thenThrow(new RuntimeException("S3 error"));
+
+        // Execute method
+        List<PaymentLinesModel> result = cashAllocationDomain.getNettedRows(paymentList, "user");
+
+        // Assertions
+        assertEquals(1, result.size());
+        assertTrue(result.get(0).getComment().contains("SSI unavailable for entity"));
     }
-    return provisionArray;
-}
