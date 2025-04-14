@@ -1,17 +1,143 @@
-// Mock the exception for payment dates
-    when(referentialServiceApi.getPaymentDates(
-        eq("ENTITY_01"),  // Match exact entity
-        eq("USD"),         // Match exact currency
-        anyString(),       // Payment mode
-        anyString(),       // "S" or "E" 
-        eq("123"),         // Provider ID
-        eq("CAT1")         // FEC category
-    )).thenThrow(new RuntimeException("DB error"));
+Feature File (invoice_edit.feature)
+gherkin
+Copy
+Feature: Edit Invoice Endpoint
+  Scenario: Successfully edit invoice with valid UUID and payload
+    Given I am authenticated with the required scope
+    And I have a valid UUID
+    And I have a valid InvoicePayableModel payload
+    When I send a PUT request to "/invoices/{wuid}"
+    Then the response status should be 200
+    And the response contains a success message
 
-    List<PaymentLinesModel> result = cashAllocationDomain.getNettedRows(paymentList, "user");
+  Scenario: Attempt to edit invoice without authentication
+    Given I am not authenticated
+    And I have a valid UUID
+    And I have a valid InvoicePayableModel payload
+    When I send a PUT request to "/invoices/{wuid}"
+    Then the response status should be 401
 
-    // Verify the stub was actually used
-    verify(referentialServiceApi, times(1)).getPaymentDates(any(), any(), any(), any(), any(), any());
-    
-    // Assertions
-    assertEquals(1, result.size());
+  Scenario: Attempt to edit invoice without required scope
+    Given I am authenticated with the "other.scope" scope
+    And I have a valid UUID
+    And I have a valid InvoicePayableModel payload
+    When I send a PUT request to "/invoices/{wuid}"
+    Then the response status should be 403
+
+  Scenario: Attempt to edit with invalid UUID
+    Given I am authenticated with the required scope
+    And I have an invalid UUID
+    And I have a valid InvoicePayableModel payload
+    When I send a PUT request to "/invoices/{wuid}"
+    Then the response status should be 404
+
+  Scenario: Attempt to edit with invalid payload
+    Given I am authenticated with the required scope
+    And I have a valid UUID
+    And I have an invalid InvoicePayableModel payload
+    When I send a PUT request to "/invoices/{wuid}"
+    Then the response status should be 400
+
+
+
+
+
+
+
+
+import io.cucumber.java.en.Given;
+import io.cucumber.java.en.When;
+import io.cucumber.java.en.Then;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.*;
+import org.springframework.security.test.context.support.WithMockUser;
+import java.util.UUID;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class InvoiceEditSteps {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    private UUID validUuid;
+    private String invalidUuid = "invalid-uuid";
+    private String requestPayload;
+    private ResponseEntity<ResponseMessage> response;
+
+    // Authentication setup (simplified example)
+    @Given("I am authenticated with the required scope")
+    public void authenticateWithScope() {
+        // Configure TestRestTemplate to include valid OAuth2 token
+        // (Implementation depends on your security setup)
+    }
+
+    @Given("I am not authenticated")
+    public void unauthenticated() {
+        // Clear authentication headers
+        restTemplate.getRestTemplate().getInterceptors().clear();
+    }
+
+    @Given("I am authenticated with the {string} scope")
+    public void authenticateWithOtherScope(String scope) {
+        // Configure token with a different scope
+    }
+
+    @Given("I have a valid UUID")
+    public void validUuid() {
+        validUuid = UUID.randomUUID(); // Replace with actual test UUID if needed
+    }
+
+    @Given("I have an invalid UUID")
+    public void invalidUuid() {
+        // Use a malformed UUID string
+    }
+
+    @Given("I have a valid InvoicePayableModel payload")
+    public void validPayload() {
+        requestPayload = "{\"field\":\"value\"}"; // Replace with valid fields
+    }
+
+    @Given("I have an invalid InvoicePayableModel payload")
+    public void invalidPayload() {
+        requestPayload = "{}"; // Missing required fields
+    }
+
+    @When("I send a PUT request to {string}")
+    public void sendPutRequest(String endpoint) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String url = endpoint.replace("{wuid}", 
+            validUuid != null ? validUuid.toString() : invalidUuid);
+
+        HttpEntity<String> request = new HttpEntity<>(requestPayload, headers);
+        response = restTemplate.exchange(
+            url, 
+            HttpMethod.PUT, 
+            request, 
+            ResponseMessage.class
+        );
+    }
+
+    @Then("the response status should be {int}")
+    public void assertStatus(int status) {
+        assertEquals(status, response.getStatusCodeValue());
+    }
+
+    @Then("the response contains a success message")
+    public void assertSuccessMessage() {
+        assertNotNull(response.getBody());
+        assertEquals("Success", response.getBody().getMessage());
+    }
+}
+
+
+
+
+
+
+
+
+
+
