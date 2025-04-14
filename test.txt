@@ -1,50 +1,3 @@
-Feature File (invoice_edit.feature)
-gherkin
-Copy
-Feature: Edit Invoice Endpoint
-  Scenario: Successfully edit invoice with valid UUID and payload
-    Given I am authenticated with the required scope
-    And I have a valid UUID
-    And I have a valid InvoicePayableModel payload
-    When I send a PUT request to "/invoices/{wuid}"
-    Then the response status should be 200
-    And the response contains a success message
-
-  Scenario: Attempt to edit invoice without authentication
-    Given I am not authenticated
-    And I have a valid UUID
-    And I have a valid InvoicePayableModel payload
-    When I send a PUT request to "/invoices/{wuid}"
-    Then the response status should be 401
-
-  Scenario: Attempt to edit invoice without required scope
-    Given I am authenticated with the "other.scope" scope
-    And I have a valid UUID
-    And I have a valid InvoicePayableModel payload
-    When I send a PUT request to "/invoices/{wuid}"
-    Then the response status should be 403
-
-  Scenario: Attempt to edit with invalid UUID
-    Given I am authenticated with the required scope
-    And I have an invalid UUID
-    And I have a valid InvoicePayableModel payload
-    When I send a PUT request to "/invoices/{wuid}"
-    Then the response status should be 404
-
-  Scenario: Attempt to edit with invalid payload
-    Given I am authenticated with the required scope
-    And I have a valid UUID
-    And I have an invalid InvoicePayableModel payload
-    When I send a PUT request to "/invoices/{wuid}"
-    Then the response status should be 400
-
-
-
-
-
-
-
-
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.When;
 import io.cucumber.java.en.Then;
@@ -61,83 +14,155 @@ public class InvoiceEditSteps {
     private TestRestTemplate restTemplate;
 
     private UUID validUuid;
-    private String invalidUuid = "invalid-uuid";
+    private String invalidUuid;
     private String requestPayload;
     private ResponseEntity<ResponseMessage> response;
+    private HttpStatus lastResponseStatus;
 
-    // Authentication setup (simplified example)
+    // ========== Authentication Steps ========== //
     @Given("I am authenticated with the required scope")
     public void authenticateWithScope() {
-        // Configure TestRestTemplate to include valid OAuth2 token
-        // (Implementation depends on your security setup)
-    }
-
-    @Given("I am not authenticated")
-    public void unauthenticated() {
-        // Clear authentication headers
-        restTemplate.getRestTemplate().getInterceptors().clear();
+        String validToken = "mocked-valid-token-with-scope:api_generate-and-send-invoices-to-clients.write";
+        configureAuthorizationHeader(validToken);
     }
 
     @Given("I am authenticated with the {string} scope")
     public void authenticateWithOtherScope(String scope) {
-        // Configure token with a different scope
+        String otherToken = "mocked-token-with-scope:" + scope.replace("\"", "");
+        configureAuthorizationHeader(otherToken);
     }
 
+    @Given("I am not authenticated")
+    public void unauthenticated() {
+        restTemplate.getRestTemplate().getInterceptors().clear();
+    }
+
+    private void configureAuthorizationHeader(String token) {
+        restTemplate.getRestTemplate().getInterceptors().clear();
+        restTemplate.getRestTemplate().getInterceptors().add((request, body, execution) -> {
+            request.getHeaders().add("Authorization", "Bearer " + token);
+            return execution.execute(request, body);
+        });
+    }
+
+    // ========== UUID Steps ========== //
     @Given("I have a valid UUID")
     public void validUuid() {
-        validUuid = UUID.randomUUID(); // Replace with actual test UUID if needed
+        this.validUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+        this.invalidUuid = null;
     }
 
     @Given("I have an invalid UUID")
     public void invalidUuid() {
-        // Use a malformed UUID string
+        this.validUuid = null;
+        this.invalidUuid = "not-a-valid-uuid-format";
     }
 
+    @Given("I have a non-existent UUID")
+    public void nonExistentUuid() {
+        this.validUuid = UUID.fromString("00000000-0000-0000-0000-000000000000");
+        this.invalidUuid = null;
+    }
+
+    // ========== Payload Steps ========== //
     @Given("I have a valid InvoicePayableModel payload")
     public void validPayload() {
-        requestPayload = "{\"field\":\"value\"}"; // Replace with valid fields
+        this.requestPayload = """
+            {
+                "invoiceNumber": "INV-2023-001",
+                "amount": 1000.50,
+                "currency": "USD",
+                "dueDate": "2023-12-31",
+                "vendorDetails": {
+                    "name": "Acme Corp",
+                    "taxId": "TAX123456"
+                },
+                "lineItems": [
+                    {
+                        "description": "Consulting Services",
+                        "quantity": 10,
+                        "unitPrice": 100.05
+                    }
+                ]
+            }
+            """;
     }
 
     @Given("I have an invalid InvoicePayableModel payload")
     public void invalidPayload() {
-        requestPayload = "{}"; // Missing required fields
+        this.requestPayload = """
+            {
+                "invoiceNumber": "",
+                "amount": -100,
+                "currency": "XYZ",
+                "dueDate": "2023-02-30",
+                "vendorDetails": {}
+            }
+            """;
     }
 
+    @Given("I have a payload with special characters")
+    public void payloadWithSpecialChars() {
+        this.requestPayload = """
+            {
+                "invoiceNumber": "INV-SP€CIAL-001",
+                "amount": 1000.50,
+                "currency": "USD",
+                "dueDate": "2023-12-31",
+                "vendorDetails": {
+                    "name": "Comp@ny & Co.",
+                    "taxId": "TAX#123"
+                }
+            }
+            """;
+    }
+
+    // ========== Request Steps ========== //
     @When("I send a PUT request to {string}")
     public void sendPutRequest(String endpoint) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Request-ID", UUID.randomUUID().toString());
 
         String url = endpoint.replace("{wuid}", 
             validUuid != null ? validUuid.toString() : invalidUuid);
 
         HttpEntity<String> request = new HttpEntity<>(requestPayload, headers);
-        response = restTemplate.exchange(
-            url, 
-            HttpMethod.PUT, 
-            request, 
-            ResponseMessage.class
-        );
+        try {
+            response = restTemplate.exchange(
+                url, 
+                HttpMethod.PUT, 
+                request, 
+                ResponseMessage.class
+            );
+            lastResponseStatus = response.getStatusCode();
+        } catch (Exception e) {
+            lastResponseStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
     }
 
+    // ========== Verification Steps ========== //
     @Then("the response status should be {int}")
     public void assertStatus(int status) {
-        assertEquals(status, response.getStatusCodeValue());
+        assertEquals(status, lastResponseStatus.value());
     }
 
     @Then("the response contains a success message")
     public void assertSuccessMessage() {
         assertNotNull(response.getBody());
         assertEquals("Success", response.getBody().getMessage());
+        assertNotNull(response.getBody().getTimestamp());
+    }
+
+    @Then("the response should include validation errors")
+    public void assertValidationErrors() {
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().getErrors().size() > 0);
+    }
+
+    @Then("the response should indicate resource not found")
+    public void assertResourceNotFound() {
+        assertNotNull(response.getBody());
+        assertEquals("Invoice not found", response.getBody().getMessage());
     }
 }
-
-
-
-
-
-
-
-
-
-
