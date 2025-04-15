@@ -1,61 +1,6 @@
- // ---- Authorization Steps ----
-    @Given("I have a valid authorization token")
-    public void setValidToken() {
-        this.token = TestUtil.generateValidToken(); // Reuse existing TestUtil
-    }
-
-    @Given("I have an invalid authorization token")
-    public void setInvalidToken() {
-        this.token = "invalid_token_123";
-    }
-
-    // ---- Payload Setup Steps ----
-    @Given("I have valid invoice edit request payload for UUID {string}")
-    public void loadValidEditPayload(String uuid) throws Exception {
-        this.payload = TestUtil.loadJsonPayload("input/invoiceEditPayload.json");
-        TextContext.invoiceUUID = uuid; // Store in shared context
-    }
-
-    @Given("I have invalid invoice edit payload missing required fields")
-    public void loadInvalidPayload() throws Exception {
-        this.payload = TestUtil.loadJsonPayload("input/invalidInvoiceEditPayload.json");
-    }
-
-    // ---- API Action Steps ----
-    @When("I send a PUT request to edit invoice")
-    public void sendEditRequest() {
-        response = given()
-            .header("Authorization", "Bearer " + token)
-            .contentType("application/json")
-            .pathParam("uuid", TextContext.invoiceUUID)
-            .body(payload)
-            .when()
-            .put(baseUrl + "/invoices/{uuid}");
-    }
-
-    // ---- Validation Steps ----
-    @Then("the edit response status code should be {int}")
-    public void verifyStatusCode(int expectedStatus) {
-        assertEquals(expectedStatus, response.getStatusCode());
-    }
-
-    @Then("the response should contain updated invoice details")
-    public void verifyUpdatedDetails() {
-        assertNotNull(response.jsonPath().getString("updatedTimestamp"));
-        assertNotNull(response.jsonPath().getString("invoiceNumber"));
-    }
-
-    @Then("the response should contain {string} error message")
-    public void verifyErrorMessage(String expectedMessage) {
-        assertTrue(response.getBody().asString().contains(expectedMessage));
-    }
-
-    @Then("the response should list validation errors for {string}")
-    public void verifyValidationErrors(String fields) {
-        String[] missingFields = fields.split(",");
-        String responseBody = response.getBody().asString();
-        
-        for (String field : missingFields) {
-            assertTrue(responseBody.contains(field.trim()));
-        }
-    }
+@Given("I have valid invoice edit request payload for UUID {string}")
+public void loadValidEditPayload(String uuid) throws Exception {
+    this.payload = TestUtil.loadJsonPayload("input/invoiceEditPayload.json");
+    TextContext.setInvoiceUUID(uuid); // Thread-safe setter
+    System.out.println("UUID set to: " + TextContext.getInvoiceUUID()); // Debug
+}
