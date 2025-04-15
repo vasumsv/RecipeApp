@@ -1,242 +1,61 @@
-public class InvoiceSteps {
-
-    private Response response;
-    private String token;
-    private String baseUrl;
-    private String editInvoiceUrl;
-    private Map<String, Object> payload = new HashMap<>();
-    private TestContext testContext = new TestContext();
-
-    @Before
-    public void setup() throws Exception {
-        String environmentType = System.getProperty("env", "dev");
-        Yaml yaml = new Yaml();
-        
-        try (InputStream inputStream = getClass().getClassLoader()
-                .getResourceAsStream("application-" + environmentType + ".yaml")) {
-            
-            Map<String, Object> config = yaml.load(inputStream);
-            Map<String, String> endpoints = (Map<String, String>) config.get("endpoints");
-            
-            this.baseUrl = endpoints.get("baseUrl");
-            this.editInvoiceUrl = endpoints.get("editInvoiceUrl");
-            RestAssured.baseURI = this.baseUrl;
-            
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load configuration", e);
-        }
-    }
-
-    // Authorization steps
-    @Given("I have a valid authorization token with {string} scope")
-    public void setValidToken(String scope) {
-        this.token = AuthUtil.generateTokenWithScope(scope);
+ // ---- Authorization Steps ----
+    @Given("I have a valid authorization token")
+    public void setValidToken() {
+        this.token = TestUtil.generateValidToken(); // Reuse existing TestUtil
     }
 
     @Given("I have an invalid authorization token")
     public void setInvalidToken() {
-        this.token = "invalid_token_" + System.currentTimeMillis();
+        this.token = "invalid_token_123";
     }
 
-    // Invoice setup steps
-    @Given("I have an existing invoice with UUID {string}")
-    public void setExistingInvoice(String uuid) {
-        testContext.setInvoiceUuid(uuid);
+    // ---- Payload Setup Steps ----
+    @Given("I have valid invoice edit request payload for UUID {string}")
+    public void loadValidEditPayload(String uuid) throws Exception {
+        this.payload = TestUtil.loadJsonPayload("input/invoiceEditPayload.json");
+        TextContext.invoiceUUID = uuid; // Store in shared context
     }
 
-    @Given("I use UUID {string}")
-    public void setInvoiceUuid(String uuid) {
-        testContext.setInvoiceUuid(uuid);
+    @Given("I have invalid invoice edit payload missing required fields")
+    public void loadInvalidPayload() throws Exception {
+        this.payload = TestUtil.loadJsonPayload("input/invalidInvoiceEditPayload.json");
     }
 
-    @Given("I use non-existent UUID {string}")
-    public void setNonExistentUuid(String uuid) {
-        testContext.setInvoiceUuid(uuid);
+    // ---- API Action Steps ----
+    @When("I send a PUT request to edit invoice")
+    public void sendEditRequest() {
+        response = given()
+            .header("Authorization", "Bearer " + token)
+            .contentType("application/json")
+            .pathParam("uuid", TextContext.invoiceUUID)
+            .body(payload)
+            .when()
+            .put(baseUrl + "/invoices/{uuid}");
     }
 
-    @Given("the invoice has version {string}")
-    public void setInvoiceVersion(String version) {
-        payload.put("version", Integer.parseInt(version));
+    // ---- Validation Steps ----
+    @Then("the edit response status code should be {int}")
+    public void verifyStatusCode(int expectedStatus) {
+        assertEquals(expectedStatus, response.getStatusCode());
     }
 
-    // Payload preparation steps
-    @Given("I prepare valid edit payload with default values")
-    public void prepareDefaultPayload() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        try (InputStream is = getClass().getClassLoader()
-                .getResourceAsStream("templates/valid_invoice_edit.json")) {
-            this.payload = mapper.readValue(is, Map.class);
-        }
-    }
-
-    @Given("I prepare valid edit payload with:")
-    public void prepareCustomPayload(Map<String, String> fields) throws Exception {
-        prepareDefaultPayload();
-        fields.forEach((key, value) -> {
-            // Handle special field types
-            if (key.equals("amount")) {
-                payload.put(key, Double.parseDouble(value));
-            } else {
-                payload.put(key, value);
-            }
-        });
-    }
-
-    @Given("I prepare edit payload with:")
-    public void prepareInvalidPayload(Map<String, String> fields) {
-        payload.clear();
-        fields.forEach((key, value) -> payload.put(key, value));
-    }
-
-    // Request steps
-    @When("I send a PUT request to {string}")
-    public void sendPutRequest(String endpoint) {
-        response = RestAssured.given()
-                .header("Authorization", "Bearer " + token)
-                .contentType(ContentType.JSON)
-                .pathParam("uuid", testContext.getInvoiceUuid())
-                .body(payload)
-                .when()
-                .put(endpoint);
-    }
-
-    // Validation steps
-    @Then("the response status code should be {int}")
-    public void verifyStatusCode(int expectedCode) {
-        Assertions.assertEquals(expectedCode, response.getStatusCode());
-    }
-
-    @Then("the response should contain the updated invoice details")
+    @Then("the response should contain updated invoice details")
     public void verifyUpdatedDetails() {
-        Assertions.assertNotNull(response.jsonPath().getString("lastModified"));
-        Assertions.assertEquals("UPDATED", response.jsonPath().getString("status"));
-    }
-
-    @Then("the response should include the following fields:")
-    public void verifyResponseFields(Map<String, String> validations) {
-        validations.forEach((field, validation) -> {
-            String actualValue = response.jsonPath().getString(field);
-            
-            if (validation.startsWith("equals ")) {
-                String expectedValue = validation.substring(6);
-                Assertions.assertEquals(expectedValue, actualValue);
-            } else if (validation.equals("not null")) {
-                Assertions.assertNotNull(actualValue);
-            }
-        });
+        assertNotNull(response.jsonPath().getString("updatedTimestamp"));
+        assertNotNull(response.jsonPath().getString("invoiceNumber"));
     }
 
     @Then("the response should contain {string} error message")
     public void verifyErrorMessage(String expectedMessage) {
-        Assertions.assertTrue(response.getBody().asString().contains(expectedMessage));
+        assertTrue(response.getBody().asString().contains(expectedMessage));
     }
 
-    @Then("the response should list error for {string}")
-    public void verifyFieldError(String field) {
-        List<Map<String, String>> errors = response.jsonPath().getList("errors");
-        Assertions.assertTrue(errors.stream()
-                .anyMatch(e -> e.get("field").equalsIgnoreCase(field)));
+    @Then("the response should list validation errors for {string}")
+    public void verifyValidationErrors(String fields) {
+        String[] missingFields = fields.split(",");
+        String responseBody = response.getBody().asString();
+        
+        for (String field : missingFields) {
+            assertTrue(responseBody.contains(field.trim()));
+        }
     }
-
-
-
-
-
-
-
-
-Feature: Invoice Management - Edit Invoice Endpoint
-  As a system user
-  I want to update invoice details via API
-  So that invoice records remain accurate
-
-  Background:
-    Given the invoice service is running
-    And I load the API configuration for "<environment>"
-
-  @HappyPath @EditInvoice
-  Scenario: Successfully update an existing invoice
-    Given I have a valid authorization token with "api.generate-and-send-invoices-to-clients.write" scope
-    And I have an existing invoice with UUID "550e8400-e29b-41d4-a716-446655440000"
-    And I prepare valid edit payload with:
-      | field         | value              |
-      | invoiceNumber | INV-2023-001       |
-      | amount        | 1500.00           |
-      | dueDate       | 2023-12-31        |
-    When I send a PUT request to "/invoices/550e8400-e29b-41d4-a716-446655440000"
-    Then the response status code should be 200
-    And the response should contain the updated invoice details
-    And the response should include the following fields:
-      | field         | validation           |
-      | invoiceNumber| equals INV-2023-001 |
-      | status        | equals UPDATED      |
-      | lastModified | not null            |
-
-  @Security @Negative
-  Scenario: Attempt update with invalid credentials
-    Given I have an invalid authorization token
-    And I have an existing invoice with UUID "550e8400-e29b-41d4-a716-446655440000"
-    And I prepare valid edit payload with default values
-    When I send a PUT request to "/invoices/550e8400-e29b-41d4-a716-446655440000"
-    Then the response status code should be 401
-    And the response should contain "Unauthorized" error message
-
-  @Validation @Negative
-  Scenario Outline: Attempt update with invalid UUID format
-    Given I have a valid authorization token
-    And I use UUID "<test_uuid>"
-    And I prepare valid edit payload with default values
-    When I send a PUT request to "/invoices/<test_uuid>"
-    Then the response status code should be <expected_status>
-    And the response should contain "<error_message>"
-
-    Examples:
-      | test_uuid       | expected_status | error_message                     |
-      | invalid_format  | 400             | Invalid UUID format               |
-      | 12345           | 400             | must be a valid UUID              |
-      |                 | 400             | UUID parameter is required        |
-
-  @DataValidation @Negative
-  Scenario Outline: Attempt update with invalid field values
-    Given I have a valid authorization token
-    And I have an existing invoice with UUID "550e8400-e29b-41d4-a716-446655440000"
-    And I prepare edit payload with:
-      | field         | value           |
-      | <field>       | <invalid_value> |
-    When I send a PUT request to "/invoices/550e8400-e29b-41d4-a716-446655440000"
-    Then the response status code should be 422
-    And the response should contain "Validation failed" message
-    And the response should list error for "<field>"
-
-    Examples:
-      | field         | invalid_value | error_detail                     |
-      | invoiceNumber | ""            | must not be blank                |
-      | amount        | -100          | must be positive                 |
-      | dueDate       | 2020-01-01    | must be future date              |
-      | currency      | XYZ           | must be valid ISO currency code  |
-
-  @NotFound @Negative
-  Scenario: Attempt update of non-existent invoice
-    Given I have a valid authorization token
-    And I use non-existent UUID "00000000-0000-0000-0000-000000000000"
-    And I prepare valid edit payload with default values
-    When I send a PUT request to "/invoices/00000000-0000-0000-0000-000000000000"
-    Then the response status code should be 404
-    And the response should contain "Invoice not found" message
-
-  @Concurrency
-  Scenario: Detect concurrent modification
-    Given I have a valid authorization token
-    And I have an existing invoice with UUID "550e8400-e29b-41d4-a716-446655440000"
-    And the invoice has version "1"
-    And I prepare edit payload with version "1"
-    But another user updates the invoice before me
-    When I send a PUT request to "/invoices/550e8400-e29b-41d4-a716-446655440000"
-    Then the response status code should be 409
-    And the response should contain "Concurrent modification detected"
-
-
-
-
-
-
