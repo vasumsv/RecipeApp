@@ -1,168 +1,125 @@
-import io.cucumber.java.en.Given;
-import io.cucumber.java.en.When;
-import io.cucumber.java.en.Then;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.*;
-import org.springframework.security.test.context.support.WithMockUser;
-import java.util.UUID;
-import static org.junit.jupiter.api.Assertions.*;
+Feature: Invoice Management - Edit Invoice
+  As an API user
+  I want to modify existing invoices
+  So I can keep invoice records up-to-date
 
-public class InvoiceEditSteps {
+  Background:
+    Given the API is configured for "<environment>"
+    
+  @Positive
+  Scenario: Successfully edit invoice with valid UUID and credentials
+    Given I have valid invoice edit request payload for UUID "550e8400-e29b-41d4-a716-446655440000"
+    And I have a valid authorization token
+    When I send a PUT request to edit invoice
+    Then the edit response status code should be 200
+    And the response should contain updated invoice details
 
-    @Autowired
-    private TestRestTemplate restTemplate;
+  @Security
+  Scenario: Attempt invoice edit with invalid token
+    Given I have valid invoice edit request payload for UUID "550e8400-e29b-41d4-a716-446655440000"
+    And I have an invalid authorization token
+    When I send a PUT request to edit invoice
+    Then the edit response status code should be 401
+    And the response should contain "Unauthorized" error message
 
-    private UUID validUuid;
-    private String invalidUuid;
-    private String requestPayload;
-    private ResponseEntity<ResponseMessage> response;
-    private HttpStatus lastResponseStatus;
+  @Validation
+  Scenario Outline: Attempt edit with invalid UUID
+    Given I have valid invoice edit request payload for UUID "<invalid_uuid>"
+    And I have a valid authorization token
+    When I send a PUT request to edit invoice
+    Then the edit response status code should be <expected_status>
+    
+    Examples:
+      | invalid_uuid                              | expected_status |
+      | invalid-uuid-123                          | 400             |
+      | 00000000-0000-0000-0000-000000000000     | 404             |
+      |                                           | 400             |
 
-    // ========== Authentication Steps ========== //
-    @Given("I am authenticated with the required scope")
-    public void authenticateWithScope() {
-        String validToken = "mocked-valid-token-with-scope:api_generate-and-send-invoices-to-clients.write";
-        configureAuthorizationHeader(validToken);
-    }
+  @EdgeCase
+  Scenario: Attempt edit without required fields
+    Given I have invalid invoice edit payload missing required fields
+    And I have a valid authorization token
+    When I send a PUT request to edit invoice
+    Then the edit response status code should be 422
+    And the response should list validation errors for "<fields>"
 
-    @Given("I am authenticated with the {string} scope")
-    public void authenticateWithOtherScope(String scope) {
-        String otherToken = "mocked-token-with-scope:" + scope.replace("\"", "");
-        configureAuthorizationHeader(otherToken);
-    }
 
-    @Given("I am not authenticated")
-    public void unauthenticated() {
-        restTemplate.getRestTemplate().getInterceptors().clear();
-    }
 
-    private void configureAuthorizationHeader(String token) {
-        restTemplate.getRestTemplate().getInterceptors().clear();
-        restTemplate.getRestTemplate().getInterceptors().add((request, body, execution) -> {
-            request.getHeaders().add("Authorization", "Bearer " + token);
-            return execution.execute(request, body);
-        });
-    }
 
-    // ========== UUID Steps ========== //
-    @Given("I have a valid UUID")
-    public void validUuid() {
-        this.validUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
-        this.invalidUuid = null;
-    }
 
-    @Given("I have an invalid UUID")
-    public void invalidUuid() {
-        this.validUuid = null;
-        this.invalidUuid = "not-a-valid-uuid-format";
-    }
 
-    @Given("I have a non-existent UUID")
-    public void nonExistentUuid() {
-        this.validUuid = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        this.invalidUuid = null;
-    }
 
-    // ========== Payload Steps ========== //
-    @Given("I have a valid InvoicePayableModel payload")
-    public void validPayload() {
-        this.requestPayload = """
-            {
-                "invoiceNumber": "INV-2023-001",
-                "amount": 1000.50,
-                "currency": "USD",
-                "dueDate": "2023-12-31",
-                "vendorDetails": {
-                    "name": "Acme Corp",
-                    "taxId": "TAX123456"
-                },
-                "lineItems": [
-                    {
-                        "description": "Consulting Services",
-                        "quantity": 10,
-                        "unitPrice": 100.05
-                    }
-                ]
-            }
-            """;
-    }
+    public class InvoiceSteps {
+    private Response response;
+    private String token;
+    private String baseUrl;
+    private String editInvoiceUrl; 
+    private Object payload;
 
-    @Given("I have an invalid InvoicePayableModel payload")
-    public void invalidPayload() {
-        this.requestPayload = """
-            {
-                "invoiceNumber": "",
-                "amount": -100,
-                "currency": "XYZ",
-                "dueDate": "2023-02-30",
-                "vendorDetails": {}
-            }
-            """;
-    }
-
-    @Given("I have a payload with special characters")
-    public void payloadWithSpecialChars() {
-        this.requestPayload = """
-            {
-                "invoiceNumber": "INV-SP€CIAL-001",
-                "amount": 1000.50,
-                "currency": "USD",
-                "dueDate": "2023-12-31",
-                "vendorDetails": {
-                    "name": "Comp@ny & Co.",
-                    "taxId": "TAX#123"
-                }
-            }
-            """;
-    }
-
-    // ========== Request Steps ========== //
-    @When("I send a PUT request to {string}")
-    public void sendPutRequest(String endpoint) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-Request-ID", UUID.randomUUID().toString());
-
-        String url = endpoint.replace("{wuid}", 
-            validUuid != null ? validUuid.toString() : invalidUuid);
-
-        HttpEntity<String> request = new HttpEntity<>(requestPayload, headers);
-        try {
-            response = restTemplate.exchange(
-                url, 
-                HttpMethod.PUT, 
-                request, 
-                ResponseMessage.class
-            );
-            lastResponseStatus = response.getStatusCode();
+    @Before
+    public void setup() {
+        // Load configurations from YAML (similar to InvoicePIBSteps)
+        String environmentType = System.getProperty("environment-type");
+        Yaml yaml = new Yaml();
+        
+        try (InputStream inputStream = this.getClass().getClassLoader()
+            .getResourceAsStream("application-" + environmentType + ".yaml")) {
+            
+            Map<String, Object> data = yaml.load(inputStream);
+            Map<String, String> endpoints = (Map<String, String>) data.get("endpoints");
+            
+            this.baseUrl = endpoints.get("baseUrl");
+            this.editInvoiceUrl = endpoints.get("editInvoiceUrl");
+            
+            RestAssured.baseURI = this.baseUrl;
+            
         } catch (Exception e) {
-            lastResponseStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+            e.printStackTrace();
         }
     }
 
-    // ========== Verification Steps ========== //
-    @Then("the response status should be {int}")
-    public void assertStatus(int status) {
-        assertEquals(status, lastResponseStatus.value());
+    @Given("I have valid invoice edit request payload for UUID {string}")
+    public void loadValidEditPayload(String uuid) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        try (InputStream is = this.getClass().getClassLoader()
+            .getResourceAsStream("input/invoiceEditPayload.json")) {
+            
+            this.payload = mapper.readValue(is, Object.class);
+            // Store UUID in test context if needed
+            TestContext.invoiceUUID = uuid; 
+        }
     }
 
-    @Then("the response contains a success message")
-    public void assertSuccessMessage() {
-        assertNotNull(response.getBody());
-        assertEquals("Success", response.getBody().getMessage());
-        assertNotNull(response.getBody().getTimestamp());
+    @When("I send a PUT request to edit invoice")
+    public void sendEditRequest() {
+        response = given()
+            .header("Authorization", "Bearer " + token)
+            .contentType(ContentType.JSON)
+            .pathParam("uuid", TestContext.invoiceUUID)
+            .body(payload)
+            .when()
+            .put(this.editInvoiceUrl);
     }
 
-    @Then("the response should include validation errors")
-    public void assertValidationErrors() {
-        assertNotNull(response.getBody());
-        assertTrue(response.getBody().getErrors().size() > 0);
+    @Then("the edit response status code should be {int}")
+    public void verifyEditStatusCode(int expectedStatusCode) {
+        assertEquals(expectedStatusCode, response.getStatusCode());
     }
 
-    @Then("the response should indicate resource not found")
-    public void assertResourceNotFound() {
-        assertNotNull(response.getBody());
-        assertEquals("Invoice not found", response.getBody().getMessage());
+    @Then("the response should contain updated invoice details")
+    public void verifyUpdatedDetails() {
+        JsonPath jsonPath = response.jsonPath();
+        assertNotNull(jsonPath.get("updatedTimestamp"));
+        assertEquals("UPDATED", jsonPath.get("status"));
+    }
+
+    @Given("I have an invalid authorization token")
+    public void setInvalidToken() {
+        this.token = "invalid_token_123";
+    }
+
+    @Given("I use an invalid UUID {string}")
+    public void setInvalidUUID(String invalidUUID) {
+        TestContext.invoiceUUID = invalidUUID;
     }
 }
