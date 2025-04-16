@@ -1,6 +1,82 @@
-@Given("I have valid invoice edit request payload for UUID {string}")
-public void loadValidEditPayload(String uuid) throws Exception {
-    this.payload = TestUtil.loadJsonPayload("input/invoiceEditPayload.json");
-    TextContext.setInvoiceUUID(uuid); // Thread-safe setter
-    System.out.println("UUID set to: " + TextContext.getInvoiceUUID()); // Debug
+package sg.cucumber.steps;
+
+import io.restassured.response.Response;
+import io.restassured.RestAssured;
+import org.junit.Assert;
+import org.yaml.snakeyaml.Yaml;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.UUID;
+
+import static io.restassured.RestAssured.given;
+
+public class InvoiceEditSteps {
+    private Response response;
+    private String token;
+    private String baseUrl;
+    private String editInvoiceUrl;
+    private String invoiceEditPayload;
+
+    {
+        // Load configuration from YAML file
+        String environmentType = System.getProperty("environment-type");
+        Yaml yaml = new Yaml();
+        try (InputStream inputStream = this.getClass().getClassLoader()
+                .getResourceAsStream("application-" + environmentType + ".yml")) {
+            Map<String, Object> data = yaml.load(inputStream);
+            Map<String, String> sql = (Map<String, String>) data.get("sql");
+            this.baseUrl = sql.get("baseUrl");
+            this.editInvoiceUrl = sql.get("editInvoiceUrl");
+            System.out.println("Base URL: " + this.baseUrl);
+            System.out.println("Edit Invoice URL: " + this.editInvoiceUrl);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Before
+    public void setup() {
+        RestAssured.baseURI = this.baseUrl;
+        // Initialize token here or get it from TestUtil as shown in the example
+        this.token = TestUtil.generateToken();
+    }
+
+    @Given("I have valid invoice edit request payload for UUID {string}")
+    public void haveValidInvoiceEditRequestPayload(String uuid) {
+        // Validate UUID format
+        UUID.fromString(uuid); // This will throw exception if invalid
+        
+        // Create or load the payload for the invoice edit request
+        this.invoiceEditPayload = "{ \"invoiceDate\": \"2023-01-01\", \"feeType\": \"SERVICE\", \"providerReference\": \"REF123\" }";
+    }
+
+    @Given("I have a valid authorization token")
+    public void haveValidAuthorizationToken() {
+        // Token is already set up in the @Before method
+        Assert.assertNotNull("Authorization token should not be null", this.token);
+    }
+
+    @When("I send a PUT request to edit invoice")
+    public void sendPutRequestToEditInvoice() {
+        response = given()
+                .header("Authorization", "Bearer " + this.token)
+                .contentType("application/json")
+                .body(this.invoiceEditPayload)
+                .when()
+                .put(this.editInvoiceUrl.replace("{uuid}", "550e8400-e29b-4104-a716-446655440000"));
+    }
+
+    @Then("the edit response status code should be {int}")
+    public void verifyEditResponseStatusCode(int expectedStatusCode) {
+        Assert.assertEquals(expectedStatusCode, response.getStatusCode());
+    }
+
+    @Then("the response should contain updated invoice details")
+    public void verifyResponseContainsUpdatedDetails() {
+        // Assuming the response contains the updated invoice details
+        String responseBody = response.getBody().asString();
+        Assert.assertTrue("Response should contain updated details", 
+                responseBody.contains("\"status\":\"Success\"") || 
+                responseBody.contains("\"invoiceReference\""));
+    }
 }
