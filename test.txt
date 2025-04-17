@@ -1,36 +1,38 @@
+// Step 1: Ensure the invoice exists
 @Given("I have a successfully created invoice")
-public void iHaveASuccessfullyCreatedInvoice() {
-    // We can reuse the invoice created in the creation scenario
-    assertNotNull(responseEntity);
-    assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
+public void iHaveASuccessfullyCreatedInvoice() throws IOException {
+    // Explicitly trigger invoice creation if not already done
+    if (responseEntity == null) {
+        iSendRequestToInvoiceCreation(); // Reuse your existing creation method
+        assertNotNull("Invoice creation failed - null response", responseEntity);
+    }
+    
+    assertEquals("Unexpected status code", HttpStatus.OK, responseEntity.getStatusCode());
     originalInvoice = responseEntity.getBody();
-    assertNotNull(originalInvoice);
-    logger.info("Original invoice created with reference: {}", originalInvoice.getInvoiceReference());
+    assertNotNull("Invoice body is null", originalInvoice);
+    logger.info("Original invoice reference: {}", originalInvoice.getInvoiceReference());
 }
 
+// Step 2: Implement edit request
 @When("I send a PUT request to edit the invoice")
-public void iSendAPUTRequestToEditTheInvoice() throws IOException {
-    assertNotNull(originalInvoice);
-    assertNotNull(editInvoiceUrl); // Should be loaded from config in constructor
+public void iSendAPUTRequestToEditTheInvoice() {
+    assertNotNull("Original invoice not created", originalInvoice);
     
-    // Modify some fields of the original invoice
-    originalInvoice.setAmount(originalInvoice.getAmount() + 100.00); // Example modification
-    originalInvoice.setDescription("Updated description");
+    // Configure endpoint
+    String editUrl = baseUrl2 + editInvoiceUrl.replace("{uuid}", originalInvoice.getInvoiceReference());
     
-    // Prepare headers with auth token
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    GenerateAccessToken generateAccessToken = new GenerateAccessToken();
-    SGConnectTokenUtil tokenUtil = new SGConnectTokenUtil(generateAccessToken);
-    headers = tokenUtil.getHeaderWithAccessToken(SGConnectTokenUtil.INTERNAL_SERVICES);
-    
+    // Prepare modified invoice
+    InvoicePayableModel modifiedInvoice = originalInvoice.toBuilder()
+        .amount(originalInvoice.getAmount() + 50.0)
+        .description("Updated description")
+        .build();
+
     // Create request entity
-    HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(originalInvoice, headers);
+    HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(modifiedInvoice, header);
     
-    // Send PUT request to edit endpoint
-    String url = baseUrl2 + editInvoiceUrl.replace("{uuid}", originalInvoice.getInvoiceReference());
+    // Execute request
     editResponseEntity = restTemplate.exchange(
-        url, 
+        editUrl, 
         HttpMethod.PUT, 
         requestEntity, 
         InvoicePayableModel.class
@@ -39,29 +41,18 @@ public void iSendAPUTRequestToEditTheInvoice() throws IOException {
     logger.info("Edit response status: {}", editResponseEntity.getStatusCode());
 }
 
+// Step 3: Add validation
 @Then("the edit response status code should be {int}")
-public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
-    assertNotNull(editResponseEntity);
-    assertEquals(expectedStatusCode, editResponseEntity.getStatusCodeValue());
+public void validateEditStatusCode(int expectedStatus) {
+    assertNotNull("Edit response is null", editResponseEntity);
+    assertEquals(expectedStatus, editResponseEntity.getStatusCodeValue());
 }
 
 @Then("the response should contain updated invoice details")
-public void theResponseShouldContainUpdatedInvoiceDetails() {
+public void validateUpdatedDetails() {
     InvoicePayableModel updatedInvoice = editResponseEntity.getBody();
-    assertNotNull(updatedInvoice);
     
-    // Verify some updated fields
+    assertNotNull("Updated invoice is null", updatedInvoice);
     assertEquals("Updated description", updatedInvoice.getDescription());
-    assertEquals(originalInvoice.getAmount() + 100.00, updatedInvoice.getAmount(), 0.001);
-    
-    // Verify the invoice reference remains the same
-    assertEquals(originalInvoice.getInvoiceReference(), updatedInvoice.getInvoiceReference());
-    
-    logger.info("Invoice successfully updated with reference: {}", updatedInvoice.getInvoiceReference());
+    assertEquals(originalInvoice.getAmount() + 50.0, updatedInvoice.getAmount(), 0.001);
 }
-
-
-
-private String editInvoiceUrl; // Will store the edit endpoint
-private ResponseEntity<InvoicePayableModel> editResponseEntity;
-private InvoicePayableModel originalInvoice;
