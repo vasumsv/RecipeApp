@@ -1,57 +1,57 @@
-sql:
-  baseUrl2: "https://api.yourservice.com"
-  register: "/api/invoices"
-  edit: "/api/invoices/{uuid}"  # Using placeholder
-  # OR
-  edit: "/api/invoices/"   
+ @edit 
+  Scenario: Edit existing invoice
+    Given I have a successfully created invoice
+    When I send a PUT request to edit the invoice
+    Then the edit response status code should be 200
+    And the response should contain updated invoice details
 
 
-  // Add this to your class fields
-private String editInvoiceUrl; // Will store the edit endpoint
+    // Add these methods to your existing InvoiceForPayableSteps class
 
-// Modify your constructor to load the edit endpoint from config
-public RegisterInvoiceForPayableSteps() throws IOException {
-    String environmentType = System.getProperty("environment-type");
-    try (InputStream inputStream = this.getClass().getClassLoader()
-        .getResourceAsStream("application-" + environmentType + ".yml")) {
-        Yaml yaml = new Yaml();
-        Map<String, Object> data = yaml.load(inputStream);
-        Map<String,String> sgConfig = (Map<String,String>) data.get("sql");
-        this.baseUrl2 = sgConfig.get("baseUrl2");
-        this.registerEndpoint = sgConfig.get("register");
-        this.editInvoiceUrl = sgConfig.get("edit"); // Load edit endpoint from config
-    }
+@Given("I have a successfully created invoice")
+public void iHaveASuccessfullyCreatedInvoice() {
+    // This step assumes the creation was already done in previous scenario
+    assertNotNull(responseEntity);
+    assertNotNull(responseEntity.getBody());
+    this.invoiceReference = responseEntity.getBody().getInvoiceReference();
 }
 
-// Modified edit method with URL handling
-@When("I send a PUT request to edit invoice")
+@When("I send a PUT request to edit the invoice")
 public void iSendPutRequestToEditInvoice() throws IOException {
-    // Get the created invoice reference
-    String invoiceReference = responseEntity.getBody().getInvoiceReference();
+    // Get the edit endpoint URL (from controller: "/invoices/{wuid}")
+    String url = baseUrl2 + "/invoices/" + invoiceReference;
     
-    // Construct edit URL - two possible approaches:
-    
-    // APPROACH 1: If endpoint has placeholder
-    String url = baseUrl2 + editInvoiceUrl.replace("{uuid}", invoiceReference);
-    
-    // APPROACH 2: If endpoint is just a path
-    // String url = baseUrl2 + editInvoiceUrl + "/" + invoiceReference;
-    
-    // Use the creation response as base
+    // Use the creation response as base for editing
     InvoicePayableModel editPayload = responseEntity.getBody();
     
-    // Make minimal changes
+    // Make minimal changes - example: update status
     editPayload.setInvoiceStatus("EDITED");
+    editPayload.setSsStatus("UPDATED");
     
-    HttpEntity<InvoicePayableModel> requestEntity = 
-        new HttpEntity<>(editPayload, headers);
+    // Prepare request with OAuth2 principal (as required by API)
+    HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(editPayload, headers);
     
     editResponseEntity = restTemplate.exchange(
         url,
-        HttpMethod.PUT, 
+        HttpMethod.PUT,
         requestEntity,
         InvoicePayableModel.class
     );
+    
+    logger.info("Invoice edit response: {}", editResponseEntity.getStatusCode());
 }
 
+@Then("the edit response status code should be {int}")
+public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
+    assertNotNull(editResponseEntity);
+    assertEquals(expectedStatusCode, editResponseEntity.getStatusCode().value());
+}
 
+@Then("the response should contain updated invoice details")
+public void theResponseShouldContainUpdatedInvoiceDetails() {
+    InvoicePayableModel editedInvoice = editResponseEntity.getBody();
+    assertNotNull(editedInvoice);
+    assertEquals("EDITED", editedInvoice.getInvoiceStatus());
+    assertEquals("UPDATED", editedInvoice.getSsStatus());
+    assertEquals(invoiceReference, editedInvoice.getInvoiceReference());
+}
