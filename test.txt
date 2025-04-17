@@ -1,68 +1,54 @@
-// ===== EDIT SCENARIO =====
-private String createdInvoiceUuid;
-
 @Given("I have a successfully created invoice")
-public void storeCreatedInvoice() {
-    // 1. Verify response entity exists
-    if (responseEntity == null) {
-        throw new IllegalStateException("Response entity is null - invoice creation failed");
-    }
-    
-    // 2. Verify response body exists
-    InvoicePayableModel createdInvoice = responseEntity.getBody();
-    if (createdInvoice == null) {
-        logger.error("Invoice creation response body is null. Status: {}", responseEntity.getStatusCode());
-        logger.error("Response headers: {}", responseEntity.getHeaders());
-        throw new IllegalStateException("Invoice creation response body is null");
-    }
-    
-    // 3. Verify UUID exists
-    if (createdInvoice.getId() == null) {
-        logger.error("Created invoice has null UUID. Full response: {}", createdInvoice);
-        throw new IllegalStateException("Created invoice has null UUID");
-    }
-    
-    // Store references
-    originalInvoice = createdInvoice;
-    createdInvoiceUuid = createdInvoice.getId().toString();
-    
-    logger.info("Stored invoice with UUID: {}", createdInvoiceUuid);
-    logger.debug("Full invoice details: {}", createdInvoice);
+public void iHaveASuccessfullyCreatedInvoice() throws IOException {
+    // Your existing creation logic from line 117
+    // This populates responseEntity with the created invoice
+    originalInvoice = responseEntity.getBody(); // Store the original invoice
+    invoiceReference = originalInvoice.getInvoiceReference();
+    logger.info("Created invoice with reference: {}", invoiceReference);
 }
 
 @When("I send a PUT request to edit the invoice")
-public void editInvoice() {
-    try {
-        // Verify we have a UUID
-        if (createdInvoiceUuid == null) {
-            throw new IllegalStateException("No invoice UUID available for editing");
-        }
-        
-        String editUrl = baseUrl2 + "/invoices/" + createdInvoiceUuid;
-        logger.info("Attempting to edit invoice at: {}", editUrl);
-        
-        // ... rest of the edit implementation ...
-    } catch (Exception e) {
-        logger.error("Failed to edit invoice: {}", e.getMessage());
-        throw e;
-    }
+public void iSendAPUTRequestToEditTheInvoice() throws JsonProcessingException {
+    String editUrl = baseUrl2 + "/invoices/" + invoiceReference;
+    
+    // Create a copy of the original invoice to modify
+    InvoicePayableModel editedInvoice = new ObjectMapper()
+        .readValue(
+            new ObjectMapper().writeValueAsString(originalInvoice),
+            InvoicePayableModel.class
+        );
+    
+    // Modify specific fields
+    editedInvoice.setInvoiceStatus("EDITED");
+    editedInvoice.setDescription("Updated description - " + LocalDateTime.now());
+    
+    editResponseEntity = restTemplate.exchange(
+        editUrl,
+        HttpMethod.PUT,
+        new HttpEntity<>(editedInvoice, header),
+        InvoicePayableModel.class
+    );
+    logger.info("Invoice edit request sent. Status: {}", editResponseEntity.getStatusCode());
 }
 
+@Then("the edit response status code should be {int}")
+public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
+    assertEquals(expectedStatusCode, editResponseEntity.getStatusCode().value());
+}
 
-
-
-
-@Then("I should receive a successful invoice response")
-public void verifyCreationResponse() {
-    assertNotNull(responseEntity);
-    logger.info("Response status: {}", responseEntity.getStatusCode());
-    logger.info("Response headers: {}", responseEntity.getHeaders());
+@Then("the response should contain updated invoice details")
+public void theResponseShouldContainUpdatedInvoiceDetails() {
+    InvoicePayableModel updatedInvoice = editResponseEntity.getBody();
+    assertNotNull(updatedInvoice);
     
-    assertNotNull(responseEntity.getBody(), 
-        "Response body is null. Full response: " + responseEntity);
+    // Verify updated fields
+    assertEquals("EDITED", updatedInvoice.getInvoiceStatus());
+    assertTrue(updatedInvoice.getDescription().startsWith("Updated description"));
     
-    assertNotNull(responseEntity.getBody().getId(),
-        "Invoice UUID is null. Full response: " + responseEntity.getBody());
+    // Verify unchanged fields
+    assertEquals(originalInvoice.getId(), updatedInvoice.getId());
+    assertEquals(originalInvoice.getInvoiceReference(), updatedInvoice.getInvoiceReference());
+    assertEquals(originalInvoice.getProviderReference(), updatedInvoice.getProviderReference());
     
-    assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
+    logger.info("Successfully edited invoice: {}", updatedInvoice);
 }
