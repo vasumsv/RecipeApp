@@ -1,34 +1,40 @@
- @edit 
-  Scenario: Edit existing invoice
+Scenario: Edit existing invoice with field updates
     Given I have a successfully created invoice
-    When I send a PUT request to edit the invoice
-    Then the edit response status code should be 200
-    And the response should contain updated invoice details
+    When I send a PUT request to edit the invoice with updated details
+    Then the edit response should contain these validations
 
 
-    // Add these methods to your existing InvoiceForPayableSteps class
+    private InvoicePayableModel originalInvoice; // To store the pre-edit state
 
 @Given("I have a successfully created invoice")
 public void iHaveASuccessfullyCreatedInvoice() {
-    // This step assumes the creation was already done in previous scenario
     assertNotNull(responseEntity);
     assertNotNull(responseEntity.getBody());
     this.invoiceReference = responseEntity.getBody().getInvoiceReference();
+    this.originalInvoice = responseEntity.getBody(); // Store original for comparison
+    logger.info("Original invoice created with reference: {}", invoiceReference);
 }
 
-@When("I send a PUT request to edit the invoice")
-public void iSendPutRequestToEditInvoice() throws IOException {
-    // Get the edit endpoint URL (from controller: "/invoices/{wuid}")
+@When("I send a PUT request to edit the invoice with updated details")
+public void iSendPutRequestToEditInvoiceWithUpdatedDetails() throws IOException {
     String url = baseUrl2 + "/invoices/" + invoiceReference;
     
-    // Use the creation response as base for editing
-    InvoicePayableModel editPayload = responseEntity.getBody();
+    // Create edit payload from original invoice
+    InvoicePayableModel editPayload = new InvoicePayableModel();
     
-    // Make minimal changes - example: update status
-    editPayload.setInvoiceStatus("EDITED");
-    editPayload.setSsStatus("UPDATED");
+    // Copy all fields from original
+    editPayload.setId(originalInvoice.getId());
+    editPayload.setInvoiceReference(originalInvoice.getInvoiceReference());
+    editPayload.setSgEntity(originalInvoice.getSgEntity());
+    // ... copy all other fields ...
     
-    // Prepare request with OAuth2 principal (as required by API)
+    // Make specific updates (example fields - adjust as needed)
+    editPayload.setInvoiceStatus("APPROVED");
+    editPayload.setSsStatus("PROCESSED");
+    editPayload.setAmount(new BigDecimal("999.99")); // Example amount update
+    editPayload.setLastUpdateDate(LocalDate.now());
+    editPayload.setLastUpdatedByUser("test-automation");
+    
     HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(editPayload, headers);
     
     editResponseEntity = restTemplate.exchange(
@@ -38,20 +44,29 @@ public void iSendPutRequestToEditInvoice() throws IOException {
         InvoicePayableModel.class
     );
     
-    logger.info("Invoice edit response: {}", editResponseEntity.getStatusCode());
+    logger.info("Invoice edit request completed with status: {}", 
+        editResponseEntity.getStatusCode());
 }
 
-@Then("the edit response status code should be {int}")
-public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
-    assertNotNull(editResponseEntity);
-    assertEquals(expectedStatusCode, editResponseEntity.getStatusCode().value());
-}
-
-@Then("the response should contain updated invoice details")
-public void theResponseShouldContainUpdatedInvoiceDetails() {
+@Then("the edit response should contain these validations")
+public void validateEditResponse() {
     InvoicePayableModel editedInvoice = editResponseEntity.getBody();
+    
+    // Basic response validation
     assertNotNull(editedInvoice);
-    assertEquals("EDITED", editedInvoice.getInvoiceStatus());
-    assertEquals("UPDATED", editedInvoice.getSsStatus());
-    assertEquals(invoiceReference, editedInvoice.getInvoiceReference());
+    assertEquals(HttpStatus.OK, editResponseEntity.getStatusCode());
+    
+    // Verify unchanged fields remain the same
+    assertEquals(originalInvoice.getId(), editedInvoice.getId());
+    assertEquals(originalInvoice.getInvoiceReference(), editedInvoice.getInvoiceReference());
+    assertEquals(originalInvoice.getSgEntity(), editedInvoice.getSgEntity());
+    
+    // Verify updated fields
+    assertEquals("APPROVED", editedInvoice.getInvoiceStatus());
+    assertEquals("PROCESSED", editedInvoice.getSsStatus());
+    assertEquals(new BigDecimal("999.99"), editedInvoice.getAmount());
+    assertEquals(LocalDate.now(), editedInvoice.getLastUpdateDate());
+    assertEquals("test-automation", editedInvoice.getLastUpdatedByUser());
+    
+    logger.info("All edit validations passed for invoice: {}", invoiceReference);
 }
