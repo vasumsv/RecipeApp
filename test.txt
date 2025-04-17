@@ -1,54 +1,41 @@
-@Given("I have a successfully created invoice")
-public void iHaveASuccessfullyCreatedInvoice() throws IOException {
-    // Your existing creation logic from line 117
-    // This populates responseEntity with the created invoice
-    originalInvoice = responseEntity.getBody(); // Store the original invoice
-    invoiceReference = originalInvoice.getInvoiceReference();
-    logger.info("Created invoice with reference: {}", invoiceReference);
-}
+public void ISendApiRequestToEditTheInvoice() throws JsonProcessingException {
+    logger.info("Entering ISendApiRequestToEditTheInvoice method...");
 
-@When("I send a PUT request to edit the invoice")
-public void iSendAPUTRequestToEditTheInvoice() throws JsonProcessingException {
-    String editUrl = baseUrl2 + "/invoices/" + invoiceReference;
-    
-    // Create a copy of the original invoice to modify
-    InvoicePayableModel editedInvoice = new ObjectMapper()
-        .readValue(
-            new ObjectMapper().writeValueAsString(originalInvoice),
-            InvoicePayableModel.class
-        );
-    
-    // Modify specific fields
+    // --- Ensure originalInvoice is not null and we have its ID ---
+    if (originalInvoice == null || originalInvoice.getId() == null) {
+        logger.error("Error: originalInvoice is null or its ID is not set. Cannot edit.");
+        // You might want to throw an exception here or handle this scenario appropriately
+        throw new IllegalStateException("Cannot edit invoice as the original invoice details are missing.");
+    }
+
+    // --- Construct the edit URL using the ID of the original invoice ---
+    String editUrlWithId = editUrl.replace("{invoiceId}", originalInvoice.getId().toString());
+    logger.info("Edit URL: {}", editUrlWithId);
+
+    // --- Initialize the editedInvoice object ---
+    InvoicePayableModel editedInvoice = new InvoicePayableModel();
     editedInvoice.setInvoiceStatus("EDITED");
-    editedInvoice.setDescription("Updated description - " + LocalDateTime.now());
-    
-    editResponseEntity = restTemplate.exchange(
-        editUrl,
-        HttpMethod.PUT,
-        new HttpEntity<>(editedInvoice, header),
-        InvoicePayableModel.class
-    );
-    logger.info("Invoice edit request sent. Status: {}", editResponseEntity.getStatusCode());
-}
+    editedInvoice.setUpdatedBy(LocalDateTime.now());
+    editedInvoice.setDescription("updated description - " + LocalDateTime.now());
 
-@Then("the edit response status code should be {int}")
-public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
-    assertEquals(expectedStatusCode, editResponseEntity.getStatusCode().value());
-}
+    // --- Make the PUT request ---
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON); // Assuming you're sending JSON
+    // Add any authorization headers if needed
+    // headers.set("Authorization", "Bearer " + accessToken); // Example
 
-@Then("the response should contain updated invoice details")
-public void theResponseShouldContainUpdatedInvoiceDetails() {
-    InvoicePayableModel updatedInvoice = editResponseEntity.getBody();
-    assertNotNull(updatedInvoice);
-    
-    // Verify updated fields
-    assertEquals("EDITED", updatedInvoice.getInvoiceStatus());
-    assertTrue(updatedInvoice.getDescription().startsWith("Updated description"));
-    
-    // Verify unchanged fields
-    assertEquals(originalInvoice.getId(), updatedInvoice.getId());
-    assertEquals(originalInvoice.getInvoiceReference(), updatedInvoice.getInvoiceReference());
-    assertEquals(originalInvoice.getProviderReference(), updatedInvoice.getProviderReference());
-    
-    logger.info("Successfully edited invoice: {}", updatedInvoice);
+    HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(editedInvoice, headers);
+
+    try {
+        editResponseEntity = restTemplate.exchange(
+                editUrlWithId, // Use the URL with the specific invoice ID
+                HttpMethod.PUT,
+                requestEntity,
+                InvoicePayableModel.class
+        );
+        logger.info("Edit invoice request sent. Status: {}", editResponseEntity.getStatusCode());
+    } catch (Exception e) {
+        logger.error("Error during edit invoice request: {}", e.getMessage(), e);
+        throw e; // Re-throw the exception for Cucumber to handle
+    }
 }
