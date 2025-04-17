@@ -1,82 +1,158 @@
-package sg.cucumber.steps;
+Feature: Invoice Creation and Edit For Payable API Testing
 
-import io.restassured.response.Response;
-import io.restassured.RestAssured;
-import org.junit.Assert;
-import org.yaml.snakeyaml.Yaml;
-import java.io.InputStream;
-import java.util.Map;
+  Scenario: Authorized user successfully creates and edits invoice for payable
+    Given I am an authorized user with the required permission to create invoice
+    When I send a request to create invoice
+    Then I should receive a successful invoice response
+    Given I have valid invoice edit request payload for the created invoice
+    When I send a PUT request to edit invoice
+    Then the edit response status code should be 200
+    And the response should contain updated invoice details
+
+
+
+
+
+    package sg.ducumber.steps;
+
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.io.*;
 import java.util.UUID;
+import java.util.Map;
+import org.yaml.snakeyaml.Yaml;
 
-import static io.restassured.RestAssured.given;
+@SpringBootTest
+public class RegisterInvoiceForPayableSteps {
+    private final Logger logger = LoggerFactory.getLogger(RegisterInvoiceForPayableSteps.class);
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private String baseUrl2;
+    private String registerEndpoint;
+    private String editEndpoint;
+    private ResponseEntity<InvoicePayableModel> responseEntity;
+    private ResponseEntity<InvoicePayableModel> editResponseEntity;
+    private HttpHeaders headers;
+    public static HttpHeaders header;
+    private String invoiceReference;
 
-public class InvoiceEditSteps {
-    private Response response;
-    private String token;
-    private String baseUrl;
-    private String editInvoiceUrl;
-    private String invoiceEditPayload;
-
-    {
-        // Load configuration from YAML file
+    public RegisterInvoiceForPayableSteps() throws IOException {
         String environmentType = System.getProperty("environment-type");
-        Yaml yaml = new Yaml();
-        try (InputStream inputStream = this.getClass().getClassLoader()
-                .getResourceAsStream("application-" + environmentType + ".yml")) {
+        try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("application-" + environmentType + ".yml")) {
+            Yaml yaml = new Yaml();
             Map<String, Object> data = yaml.load(inputStream);
-            Map<String, String> sql = (Map<String, String>) data.get("sql");
-            this.baseUrl = sql.get("baseUrl");
-            this.editInvoiceUrl = sql.get("editInvoiceUrl");
-            System.out.println("Base URL: " + this.baseUrl);
-            System.out.println("Edit Invoice URL: " + this.editInvoiceUrl);
+            Map<String,String> sgConfig = (Map<String,String>) data.get("sql");
+            this.baseUrl2 = sgConfig.get("baseUrl2");
+            this.registerEndpoint = sgConfig.get("register");
+            this.editEndpoint = sgConfig.get("edit");
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    @Before
-    public void setup() {
-        RestAssured.baseURI = this.baseUrl;
-        // Initialize token here or get it from TestUtil as shown in the example
-        this.token = TestUtil.generateToken();
+    @Given("I am an authorized user with the required permission to create invoice")
+    public void iAmAnAuthorizedUserWithTheRequiredPermissionsToCreateInvoice() {
+        headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        GenerateAccessToken generateAccessToken = new GenerateAccessToken();
+        SGConnectTokenUtil tokenUtil = new SGConnectTokenUtil(generateAccessToken);
+        headers = tokenUtil.getHeaderWithAccessToken(SGConnectTokenUtil.INTERNAL_SERVICES);
+        header = headers;
     }
 
-    @Given("I have valid invoice edit request payload for UUID {string}")
-    public void haveValidInvoiceEditRequestPayload(String uuid) {
-        // Validate UUID format
-        UUID.fromString(uuid); // This will throw exception if invalid
+    @When("I send a request to create invoice")
+    public void iSendRequestToInvoiceCreation() throws IOException, JSONException {
+        String url = baseUrl2 + registerEndpoint;
         
-        // Create or load the payload for the invoice edit request
-        this.invoiceEditPayload = "{ \"invoiceDate\": \"2023-01-01\", \"feeType\": \"SERVICE\", \"providerReference\": \"REF123\" }";
+        InvoiceItem[] invoiceItems = new InvoiceItem[0];
+        String invoicePayableModelRequest = null;
+        String invoiceItemsRequest = mapper.writeValueAsString(invoiceItems);
+        
+        try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("input/InvoicePayableModel.json")) {
+            assert inputStream != null;
+            byte[] bytes = inputStream.readAllBytes();
+            invoicePayableModelRequest = new String(bytes, StandardCharsets.UTF_8);
+            invoicePayableModelRequest = invoicePayableModelRequest.replace("target: '{provider_reference}'", UUID.randomUUID().toString());
+        }
+
+        MultiValueMap<String, Object> multiValueMap = new LinkedMultiValueMap<>();
+        multiValueMap.add("invoicePayableModelRequest", new HttpEntity<>(invoicePayableModelRequest, headers));
+        multiValueMap.add("invoiceItemsRequest", new HttpEntity<>(invoiceItemsRequest, headers));
+        multiValueMap.add("file", new FileSystemResource(new File("src/test/resources/files/50fee99b-22ec-4c44-b0fb-cf117aaf712a.pdf")));
+        multiValueMap.add("file", new FileSystemResource(new File("src/test/resources/files/50CIETE_GEHEBALE_PARIS_WM2502-EU8-OTC-France-6-1-0011.csv")));
+
+        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(multiValueMap, headers);
+        logger.info("files exists {}", requestEntity);
+
+        responseEntity = restTemplate.exchange(url, HttpMethod.POST, requestEntity, InvoicePayableModel.class);
+        logger.info("save Response Entity {}", responseEntity.getStatusCode());
+        
+        // Store the invoice reference for edit scenario
+        invoiceReference = responseEntity.getBody().getInvoiceReference();
     }
 
-    @Given("I have a valid authorization token")
-    public void haveValidAuthorizationToken() {
-        // Token is already set up in the @Before method
-        Assert.assertNotNull("Authorization token should not be null", this.token);
+    @Then("I should receive a successful invoice response")
+    public void iShouldReceiveASuccessfulInvoiceResponse() throws IOException {
+        assertNotNull(responseEntity);
+        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
+        
+        JsonNode expectGenResponse = mapper.readTree(new File("src/test/resources/output/response_invoice_creation_for_payable.json"));
+        String actualResponseStr = mapper.writeValueAsString(responseEntity.getBody());
+        JsonNode actualResponse = mapper.readTree(actualResponseStr);
+
+        assertNotNull(actualResponse.get("invoiceReference"));
+        assertEquals(expectGenResponse.get("invoiceStatus").asText(), actualResponse.get("invoiceStatus").asText());
+        assertEquals(expectGenResponse.get("ssStatus").asText(), actualResponse.get("ssStatus").asText());
+    }
+
+    @Given("I have valid invoice edit request payload for the created invoice")
+    public void iHaveValidInvoiceEditRequestPayload() throws IOException {
+        // You can use the same headers from the create scenario
+        assertNotNull(invoiceReference);
+        
+        try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("input/EditInvoicePayableModel.json")) {
+            assert inputStream != null;
+            byte[] bytes = inputStream.readAllBytes();
+            String editRequestPayload = new String(bytes, StandardCharsets.UTF_8);
+            editRequestPayload = editRequestPayload.replace("{invoice_reference}", invoiceReference);
+            // Store the payload for the edit step if needed
+        }
     }
 
     @When("I send a PUT request to edit invoice")
-    public void sendPutRequestToEditInvoice() {
-        response = given()
-                .header("Authorization", "Bearer " + this.token)
-                .contentType("application/json")
-                .body(this.invoiceEditPayload)
-                .when()
-                .put(this.editInvoiceUrl.replace("{uuid}", "550e8400-e29b-4104-a716-446655440000"));
+    public void iSendPutRequestToEditInvoice() throws IOException {
+        String url = baseUrl2 + editEndpoint.replace("{invoice_reference}", invoiceReference);
+        
+        try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("input/EditInvoicePayableModel.json")) {
+            assert inputStream != null;
+            byte[] bytes = inputStream.readAllBytes();
+            String editRequestPayload = new String(bytes, StandardCharsets.UTF_8);
+            editRequestPayload = editRequestPayload.replace("{invoice_reference}", invoiceReference);
+            
+            HttpEntity<String> requestEntity = new HttpEntity<>(editRequestPayload, headers);
+            editResponseEntity = restTemplate.exchange(url, HttpMethod.PUT, requestEntity, InvoicePayableModel.class);
+            logger.info("Edit Response Entity {}", editResponseEntity.getStatusCode());
+        }
     }
 
     @Then("the edit response status code should be {int}")
-    public void verifyEditResponseStatusCode(int expectedStatusCode) {
-        Assert.assertEquals(expectedStatusCode, response.getStatusCode());
+    public void theEditResponseStatusCodeShouldBe(int expectedStatusCode) {
+        assertNotNull(editResponseEntity);
+        assertEquals(expectedStatusCode, editResponseEntity.getStatusCode().value());
     }
 
     @Then("the response should contain updated invoice details")
-    public void verifyResponseContainsUpdatedDetails() {
-        // Assuming the response contains the updated invoice details
-        String responseBody = response.getBody().asString();
-        Assert.assertTrue("Response should contain updated details", 
-                responseBody.contains("\"status\":\"Success\"") || 
-                responseBody.contains("\"invoiceReference\""));
+    public void theResponseShouldContainUpdatedInvoiceDetails() throws IOException {
+        JsonNode responseBody = mapper.readTree(mapper.writeValueAsString(editResponseEntity.getBody()));
+        assertNotNull(responseBody.get("invoiceReference"));
+        assertEquals(invoiceReference, responseBody.get("invoiceReference").asText());
+        // Add more assertions as needed for updated fields
     }
 }
