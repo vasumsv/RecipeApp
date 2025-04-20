@@ -1,91 +1,23 @@
-package sg.cucumber.steps;
-
-import org.springframework.http.*;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.web.client.RestTemplate;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.UUID;
-
-public class InvoiceForPayablesteps {
-    // ... (existing variables)
-
-    private String tempInvoiceFilePath; // Add this
-
-    // ========== CREATE INVOICE STEPS ========== //
-    @When("I send a request to create invoice")
-    public void sendRequestToCreateInvoice() throws IOException {
-        // ... (existing setup code)
-
-        // Corrected file loading with try-with-resources
-        try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("input/InvoicePayableModel.json")) {
-            assert inputStream != null;
-            invoicePayableModelRequest = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
-                .replace("{provider_reference}", UUID.randomUUID().toString());
-        }
+@Then("I should receive a successful invoice response")
+public void verifySuccessResponse() throws IOException {
+    // 1. First, verify the response is valid
+    assertNotNull("Response entity is null", responseEntity);
+    assertNotNull("Response body is null", responseEntity.getBody());
+    
+    // 2. Set up the temp directory (ADD THIS PART)
+    private static final String TEMP_DIR = "target/temp/";
+    Path tempDirPath = Paths.get(TEMP_DIR);
+    if (!Files.exists(tempDirPath)) {
+        Files.createDirectories(tempDirPath);
     }
-
-    @Then("I should receive a successful invoice response")
-    public void verifySuccessfulResponse() throws IOException {
-        assertNotNull(responseEntity);
-        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        
-        // Save response to temp file
-        ObjectMapper mapper = new ObjectMapper();
-        String fileName = "temp_invoice_" + responseEntity.getBody().getInvoiceReference() + ".json";
-        Path path = Paths.get("target/temp/" + fileName);
-        Files.createDirectories(path.getParent());
-        mapper.writeValue(path.toFile(), responseEntity.getBody());
-        this.tempInvoiceFilePath = path.toString();
-    }
-
-    // ========== EDIT INVOICE STEPS ========== //
-    @Given("I have a successfully created invoice")
-    public void loadCreatedInvoice() throws IOException {
-        // Load from temp file
-        ObjectMapper mapper = new ObjectMapper();
-        InvoicePayableModel invoice = mapper.readValue(new File(tempInvoiceFilePath), InvoicePayableModel.class);
-        this.id = invoice.getInvoiceReference();
-        this.originalInvoice = invoice;
-    }
-
-    @When("I send a PUT request to edit the invoice")
-    public void sendEditRequest() {
-        String url = baseUrl2 + editInvoiceUrl.replace("{uuid}", this.id);
-        originalInvoice.setInvoiceStatus("EDITED"); // Modify field
-        
-        HttpEntity<InvoicePayableModel> requestEntity = new HttpEntity<>(originalInvoice, headers);
-        editResponseEntity = restTemplate.exchange(url, HttpMethod.PUT, requestEntity, InvoicePayableModel.class);
-    }
-
-    @Then("the edit response status code should be {int}")
-    public void verifyEditStatusCode(int expectedStatusCode) {
-        assertEquals(expectedStatusCode, editResponseEntity.getStatusCodeValue());
-    }
-
-    @Then("the response should contain updated invoice details")
-    public void verifyUpdatedDetails() {
-        InvoicePayableModel editedInvoice = editResponseEntity.getBody();
-        assertEquals("EDITED", editedInvoice.getInvoiceStatus());
-    }
-
-    @Then("the temporary invoice file is deleted")
-    public void deleteTempFile() throws IOException {
-        if (tempInvoiceFilePath != null) {
-            Files.deleteIfExists(Paths.get(tempInvoiceFilePath));
-            logger.info("Deleted temporary file: {}", tempInvoiceFilePath);
-        }
-    }
-}
-
-
-
-// Add this to class-level variables
-private static final String TEMP_DIR = "target/temp/";
-
-// Modify file saving
-Path path = Paths.get(TEMP_DIR + fileName);
-if (!Files.exists(Paths.get(TEMP_DIR))) {
-    Files.createDirectories(Paths.get(TEMP_DIR));
+    
+    // 3. Save the invoice to a file
+    String fileName = "temp_invoice_" + responseEntity.getBody().getInvoiceReference() + ".json";
+    Path filePath = Paths.get(TEMP_DIR + fileName);
+    
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.writeValue(filePath.toFile(), responseEntity.getBody());
+    this.tempInvoiceFilePath = filePath.toString();
+    
+    logger.info("Saved temporary invoice file: {}", tempInvoiceFilePath);
 }
