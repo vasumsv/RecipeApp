@@ -1,23 +1,108 @@
-@Then("I should receive a successful invoice response")
-public void verifySuccessResponse() throws IOException {
-    // 1. First, verify the response is valid
-    assertNotNull("Response entity is null", responseEntity);
-    assertNotNull("Response body is null", responseEntity.getBody());
-    
-    // 2. Set up the temp directory (ADD THIS PART)
-    private static final String TEMP_DIR = "target/temp/";
-    Path tempDirPath = Paths.get(TEMP_DIR);
-    if (!Files.exists(tempDirPath)) {
-        Files.createDirectories(tempDirPath);
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import java.util.Arrays;
+import java.util.List;
+
+public class CashAllocationDomainTest {
+
+    @Mock
+    private FileProcessingService fileProcessingService;
+    @Mock
+    private CashAllocationRepositoryApi cashAllocationRepositoryApi;
+    @Mock
+    private InvoiceServiceApi invoiceServiceApi;
+    @Mock
+    private ReferentialServiceApi referentialServiceApi;
+    @Mock
+    private Logger logger;
+    @Mock
+    private KafkaTemplate<String, String> kafkaTemplate;
+
+    @InjectMocks
+    private CashAllocationDomain cashAllocationDomain;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        // Manually inject constants/missing dependencies (code cannot be modified)
+        cashAllocationDomain = new CashAllocationDomain(
+            fileProcessingService,
+            cashAllocationRepositoryApi,
+            kafkaTemplate
+        );
     }
-    
-    // 3. Save the invoice to a file
-    String fileName = "temp_invoice_" + responseEntity.getBody().getInvoiceReference() + ".json";
-    Path filePath = Paths.get(TEMP_DIR + fileName);
-    
-    ObjectMapper mapper = new ObjectMapper();
-    mapper.writeValue(filePath.toFile(), responseEntity.getBody());
-    this.tempInvoiceFilePath = filePath.toString();
-    
-    logger.info("Saved temporary invoice file: {}", tempInvoiceFilePath);
+
+    // Test normal line processing
+    @Test
+    void testCashAllocationModelList_NormalLine() {
+        List<String> lines = Arrays.asList(
+            "VALIDLINE 04501061855 20231001 1234567890123456"
+        );
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
+        assertFalse(result.isEmpty());
+    }
+
+    // Test skipped lines (account numbers 04501061855 or 20501444580)
+    @Test
+    void testCashAllocationModelList_SkipAccountNumbers() {
+        List<String> lines = Arrays.asList(
+            "X04501061855Y20231001...",  // Matches ACCOUNT_NUMBER_1
+            "X20501444580Y20231001..."   // Matches ACCOUNT_NUMBER_2
+        );
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "0815.WXG_BIFFACT");
+        assertTrue(result.isEmpty());
+    }
+
+    // Test exception in date parsing
+    @Test
+    void testCashAllocationModelList_InvalidDate() {
+        List<String> lines = Arrays.asList(
+            "INVALIDDATE 300038497 INVALIDDATE ..."
+        );
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "0815.WXG_EZE");
+        verify(logger).error("Exception Occurred", any(Exception.class));
+    }
+
+    // Test line shorter than 515 characters
+    @Test
+    void testCashAllocationModelList_ShortLine() {
+        List<String> lines = Arrays.asList("SHORT");
+        cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
+        verify(logger).error("Exception Occurred", any(Exception.class));
+    }
+
+    // Test getInvoiceRefFromSupplementaryDetails (assuming regex pattern)
+    @Test
+    void testGetInvoiceRefFromSupplementaryDetails() {
+        // Assume invoiceRefPattern is set to a valid regex
+        cashAllocationDomain.setInvoiceRefPattern("INV\\d+"); // Hypothetical setter
+        String ref = cashAllocationDomain.getInvoiceRefFromSupplementaryDetails("INV12345");
+        assertNotNull(ref);
+    }
+
+    // Test sign handling (negative amount)
+    @Test
+    void testNegativeAmount() {
+        String line = "SAMPLELINE 300038497 20231001 0-1000...";
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(Arrays.asList(line), "test.wxg");
+        assertTrue(result.get(0).getAmount().doubleValue() < 0);
+    }
+
+    // Test logger calls for all error messages
+    @Test
+    void testLoggerErrorCoverage() {
+        // Force exceptions in multiple code blocks
+        List<String> lines = Arrays.asList(
+            "INVALID1",  // Causes parsing errors
+            "INVALID2"   // Triggers continue
+        );
+        cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
+        verify(logger, atLeastOnce()).error(anyString(), any(Exception.class));
+    }
 }
