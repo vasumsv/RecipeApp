@@ -1,53 +1,33 @@
- // Test skipped lines due to account numbers
-    @Test
-    void testSkipAccountNumbers() {
-        List<String> lines = Arrays.asList(
-            "X04501061855Y20231001...", // ACCOUNT_NUMBER_1
-            "X20501444580Y20231001..."  // ACCOUNT_NUMBER_2
-        );
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
-            lines, 
-            "0815.WXG_BIFFACT" // Matches GAIA_WXG_FILE
-        );
-        assertTrue(result.isEmpty());
-    }
+@Test
+void testTransferFileLines154To159() throws Exception {
+    // Setup
+    LocalDate date = LocalDate.now();
+    List<CashAllocationModel> models = new ArrayList<>();
+    
+    // Create model that triggers the condition: invoiceMatched starts with "RSF-", exists in invoices, and has counterpartyId
+    CashAllocationModel model = new CashAllocationModel();
+    model.setInvoiceMatched("RSF-123ngpwc 456"); // Contains split delimiter
+    model.setCounterPartyId("CP123");
+    models.add(model);
 
-    // Test exception handling in date parsing
-    @Test
-    void testDateParsingException() {
-        List<String> lines = Collections.singletonList("INVALIDDATE 300038497 ...");
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
-        verify(logger).error("Exception Occurred", any(Exception.class));
-    }
+    // Mock dependencies
+    when(invoiceServiceApi.getADInvoice(anyString())).thenReturn(new InvoiceABList());
+    
+    // Force the invoices list to already contain the invoice (line 157 condition)
+    List<String> invoices = new ArrayList<>();
+    invoices.add("RSF-123ngpwc 456"); // Makes invoices.contains(...) true
+    
+    // Use reflection to inject the invoices list into the domain instance
+    Field invoicesField = AbDomain.class.getDeclaredField("invoices");
+    invoicesField.setAccessible(true);
+    invoicesField.set(abDomain, invoices);
 
-    // Test logger coverage for substring errors (amount parsing)
-    @Test
-    void testAmountParsingError() {
-        List<String> lines = Collections.singletonList("SHORT_LINE");
-        cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
-        verify(logger).error("Exception Occurred", any(Exception.class));
-    }
+    // Execute
+    String filename = abDomain.transferFile(date, models);
 
-    // Test empty input
-    @Test
-    void testEmptyInput() {
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
-            Collections.emptyList(), 
-            "test.wxg"
-        );
-        assertTrue(result.isEmpty());
-    }
-
-    // Test lines that trigger continue in loop
-    @Test
-    void testContinueInLoop() {
-        List<String> lines = Arrays.asList(
-            "X300038497Y20231001...", // GAIA_WXG_EZE_FILE account
-            "INVALID_LINE"
-        );
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
-            lines, 
-            "0815.WXG_EZE" // Matches GAIA_WXG_EZE_FILE
-        );
-        assertTrue(result.isEmpty());
-    }
+    // Verify file operations occurred (line 154-155)
+    verify(fileProcessingService, atLeastOnce()).writeToFile(any(), anyString());
+    
+    // Verify buildLine was called (line 159)
+    verify(invoiceServiceApi).getADInvoice("456"); // After split by "ngpwc "
+}
