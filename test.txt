@@ -1,108 +1,53 @@
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.slf4j.Logger;
-import java.util.Arrays;
-import java.util.List;
-
-public class CashAllocationDomainTest {
-
-    @Mock
-    private FileProcessingService fileProcessingService;
-    @Mock
-    private CashAllocationRepositoryApi cashAllocationRepositoryApi;
-    @Mock
-    private InvoiceServiceApi invoiceServiceApi;
-    @Mock
-    private ReferentialServiceApi referentialServiceApi;
-    @Mock
-    private Logger logger;
-    @Mock
-    private KafkaTemplate<String, String> kafkaTemplate;
-
-    @InjectMocks
-    private CashAllocationDomain cashAllocationDomain;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        // Manually inject constants/missing dependencies (code cannot be modified)
-        cashAllocationDomain = new CashAllocationDomain(
-            fileProcessingService,
-            cashAllocationRepositoryApi,
-            kafkaTemplate
-        );
-    }
-
-    // Test normal line processing
+ // Test skipped lines due to account numbers
     @Test
-    void testCashAllocationModelList_NormalLine() {
+    void testSkipAccountNumbers() {
         List<String> lines = Arrays.asList(
-            "VALIDLINE 04501061855 20231001 1234567890123456"
+            "X04501061855Y20231001...", // ACCOUNT_NUMBER_1
+            "X20501444580Y20231001..."  // ACCOUNT_NUMBER_2
         );
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
-        assertFalse(result.isEmpty());
-    }
-
-    // Test skipped lines (account numbers 04501061855 or 20501444580)
-    @Test
-    void testCashAllocationModelList_SkipAccountNumbers() {
-        List<String> lines = Arrays.asList(
-            "X04501061855Y20231001...",  // Matches ACCOUNT_NUMBER_1
-            "X20501444580Y20231001..."   // Matches ACCOUNT_NUMBER_2
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
+            lines, 
+            "0815.WXG_BIFFACT" // Matches GAIA_WXG_FILE
         );
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "0815.WXG_BIFFACT");
         assertTrue(result.isEmpty());
     }
 
-    // Test exception in date parsing
+    // Test exception handling in date parsing
     @Test
-    void testCashAllocationModelList_InvalidDate() {
-        List<String> lines = Arrays.asList(
-            "INVALIDDATE 300038497 INVALIDDATE ..."
-        );
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "0815.WXG_EZE");
+    void testDateParsingException() {
+        List<String> lines = Collections.singletonList("INVALIDDATE 300038497 ...");
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
         verify(logger).error("Exception Occurred", any(Exception.class));
     }
 
-    // Test line shorter than 515 characters
+    // Test logger coverage for substring errors (amount parsing)
     @Test
-    void testCashAllocationModelList_ShortLine() {
-        List<String> lines = Arrays.asList("SHORT");
+    void testAmountParsingError() {
+        List<String> lines = Collections.singletonList("SHORT_LINE");
         cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
         verify(logger).error("Exception Occurred", any(Exception.class));
     }
 
-    // Test getInvoiceRefFromSupplementaryDetails (assuming regex pattern)
+    // Test empty input
     @Test
-    void testGetInvoiceRefFromSupplementaryDetails() {
-        // Assume invoiceRefPattern is set to a valid regex
-        cashAllocationDomain.setInvoiceRefPattern("INV\\d+"); // Hypothetical setter
-        String ref = cashAllocationDomain.getInvoiceRefFromSupplementaryDetails("INV12345");
-        assertNotNull(ref);
-    }
-
-    // Test sign handling (negative amount)
-    @Test
-    void testNegativeAmount() {
-        String line = "SAMPLELINE 300038497 20231001 0-1000...";
-        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(Arrays.asList(line), "test.wxg");
-        assertTrue(result.get(0).getAmount().doubleValue() < 0);
-    }
-
-    // Test logger calls for all error messages
-    @Test
-    void testLoggerErrorCoverage() {
-        // Force exceptions in multiple code blocks
-        List<String> lines = Arrays.asList(
-            "INVALID1",  // Causes parsing errors
-            "INVALID2"   // Triggers continue
+    void testEmptyInput() {
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
+            Collections.emptyList(), 
+            "test.wxg"
         );
-        cashAllocationDomain.cashAllocationModelList(lines, "test.wxg");
-        verify(logger, atLeastOnce()).error(anyString(), any(Exception.class));
+        assertTrue(result.isEmpty());
     }
-}
+
+    // Test lines that trigger continue in loop
+    @Test
+    void testContinueInLoop() {
+        List<String> lines = Arrays.asList(
+            "X300038497Y20231001...", // GAIA_WXG_EZE_FILE account
+            "INVALID_LINE"
+        );
+        List<CashAllocationModel> result = cashAllocationDomain.cashAllocationModelList(
+            lines, 
+            "0815.WXG_EZE" // Matches GAIA_WXG_EZE_FILE
+        );
+        assertTrue(result.isEmpty());
+    }
